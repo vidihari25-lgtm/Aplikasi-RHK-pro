@@ -355,8 +355,41 @@ if check_password():
         for item in data.get('kegiatan', []): add_p_indent(safe_str(item).replace('\n', ' '))
 
         doc.add_paragraph("C. Hasil yang dicapai", style='Heading 1')
+        
+        # --- PERUBAHAN TAMPILAN WORD (TABEL RAPI) ---
         if kpm_data and isinstance(kpm_data, dict):
-            doc.add_paragraph(f"Profil KPM: {kpm_data.get('Nama')} (NIK: {kpm_data.get('NIK')})")
+            # Gunakan Tabel agar alignment titik dua (:) rapi
+            p = doc.add_paragraph()
+            p.add_run("Profil KPM:").bold = True
+            
+            table = doc.add_table(rows=0, cols=3)
+            table.autofit = False
+            # Atur lebar kolom: Label, Titik Dua, Value
+            table.columns[0].width = Cm(5.5)
+            table.columns[1].width = Cm(0.5)
+            table.columns[2].width = Cm(10.0)
+            
+            fields_to_show = [
+                ("Nama", kpm_data.get('Nama', '-')),
+                ("NIK", kpm_data.get('NIK', '-')),
+                ("Alamat", kpm_data.get('Alamat', '-')),
+                ("Kategori Kesejahteraan", kpm_data.get('Kategori', '-')),
+                ("Status", kpm_data.get('Status', '-')),
+                ("Jenis Graduasi", kpm_data.get('Jenis Graduasi', '-')),
+                ("Tahun Bergabung PKH", kpm_data.get('Tahun Bergabung', '-')),
+                ("Jumlah Anggota Keluarga", kpm_data.get('Jumlah Anggota', '-')),
+                ("Alasan Graduasi", kpm_data.get('Alasan', '-'))
+            ]
+            
+            for label, val in fields_to_show:
+                row_cells = table.add_row().cells
+                row_cells[0].text = label
+                row_cells[1].text = ":"
+                row_cells[2].text = safe_str(val)
+                
+            doc.add_paragraph(" ") # Spasi setelah tabel
+        # -----------------------------------------------
+
         for i, item in enumerate(data.get('hasil', []), 1): add_numbered_item(i, item)
 
         doc.add_paragraph("D. Kesimpulan dan Saran", style='Heading 1')
@@ -440,8 +473,29 @@ if check_password():
 
         pdf.ln(2); pdf.set_font("Times", "B", 12); pdf.cell(0, 8, "C. Hasil yang dicapai", ln=True)
         pdf.set_font("Times", "", 12)
+        
+        # --- PERUBAHAN TAMPILAN PDF (ALIGNMENT RAPI) ---
         if kpm_data and isinstance(kpm_data, dict):
-            pdf.cell(0, 6, TXT(f"Profil KPM: {kpm_data.get('Nama')} (NIK: {kpm_data.get('NIK')})"), ln=True)
+            fields_to_show = [
+                ("Nama", kpm_data.get('Nama', '-')),
+                ("NIK", kpm_data.get('NIK', '-')),
+                ("Alamat", kpm_data.get('Alamat', '-')),
+                ("Kategori Kesejahteraan", kpm_data.get('Kategori', '-')),
+                ("Status", kpm_data.get('Status', '-')),
+                ("Jenis Graduasi", kpm_data.get('Jenis Graduasi', '-')),
+                ("Tahun Bergabung PKH", kpm_data.get('Tahun Bergabung', '-')),
+                ("Jumlah Anggota Keluarga", kpm_data.get('Jumlah Anggota', '-')),
+                ("Alasan Graduasi", kpm_data.get('Alasan', '-'))
+            ]
+            
+            for label, val in fields_to_show:
+                pdf.cell(50, 6, TXT(label), 0, 0) # Label (width 50)
+                pdf.cell(5, 6, ":", 0, 0)       # Separator (width 5)
+                pdf.multi_cell(0, 6, TXT(safe_str(val)), 0, 1) # Value (sisa)
+            
+            pdf.ln(2)
+        # -----------------------------------------------
+
         for i, item in enumerate(data.get('hasil', []), 1):
             pdf.cell(10, 6, f"{i}.", 0, 0); pdf.multi_cell(0, 6, TXT(item))
 
@@ -574,9 +628,21 @@ if check_password():
 
         if is_rhk3:
             st.info("ℹ️ RHK 3: Pilih KPM dari Excel.")
-            template_df = pd.DataFrame({"Nama": ["ARJO"], "NIK": ["123"], "Alamat": ["Dusun A"], "Kategori": ["Sejahtera"], "Status":["Graduasi"], "Alasan":["Mampu"]})
             
-            # --- FIXED: DOWNLOAD XLSX ---
+            # --- TEMPLATE DIPERBARUI SESUAI GAMBAR ---
+            template_df = pd.DataFrame({
+                "Nama": ["ARJO SARDI"], 
+                "NIK": ["180206xxx"], 
+                "Alamat": ["Dusun 1, Kampung Mojopahit"], 
+                "Kategori": ["Sejahtera"], 
+                "Status": ["Lulus Graduasi Mandiri"],
+                "Jenis Graduasi": ["Sukarela"],
+                "Tahun Bergabung": ["2018"],
+                "Jumlah Anggota": ["4 Orang"],
+                "Alasan": ["Sudah merasa mampu"]
+            })
+            
+            # --- DOWNLOAD XLSX ---
             buffer = io.BytesIO()
             template_df.to_excel(buffer, index=False)
             buffer.seek(0)
