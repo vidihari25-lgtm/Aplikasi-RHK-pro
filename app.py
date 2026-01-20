@@ -15,16 +15,19 @@ from PIL import Image
 import tempfile
 
 # ==========================================
-# 1. KONFIGURASI HALAMAN & GLOBAL VAR
+# 1. KONFIGURASI HALAMAN
 # ==========================================
 st.set_page_config(page_title="Aplikasi RHK PKH Pro", layout="wide")
 
-# --- DAFTAR USER & PASSWORD ---
+# --- USERNAME & PASSWORD (Diatur Disini Agar Mudah) ---
 DAFTAR_USER = {
     "admin": "admin123",
     "pendamping": "pkh2026",
     "user": "user"
 }
+
+# --- API KEY GOOGLE (Masukkan Disini) ---
+GOOGLE_API_KEY_MANUAL = "MASUKKAN_KEY_GOOGLE_ANDA_DISINI"
 
 # --- CONFIG DATA LAPORAN ---
 CONFIG_LAPORAN = {
@@ -48,12 +51,12 @@ CONFIG_LAPORAN = {
 }
 
 # ==========================================
-# 2. FUNGSI-FUNGSI UTAMA (DATABASE & TOOLS)
+# 2. FUNGSI-FUNGSI PENDUKUNG (GLOBAL)
 # ==========================================
 # Fungsi ditaruh di luar agar tidak kena Indentation Error
 
 def init_db():
-    conn = sqlite3.connect('riwayat_v41_final.db')
+    conn = sqlite3.connect('riwayat_v42_fix.db')
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS riwayat (id INTEGER PRIMARY KEY, tgl TEXT, rhk TEXT, judul TEXT, lokasi TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS user_settings (
@@ -66,7 +69,7 @@ def init_db():
     conn.commit(); conn.close()
 
 def get_user_settings():
-    conn = sqlite3.connect('riwayat_v41_final.db')
+    conn = sqlite3.connect('riwayat_v42_fix.db')
     c = conn.cursor()
     c.execute('SELECT nama, nip, kpm, prov, kab, kec, kel FROM user_settings WHERE id=1')
     data = c.fetchone()
@@ -74,21 +77,21 @@ def get_user_settings():
     return data
 
 def save_user_settings(nama, nip, kpm, prov, kab, kec, kel):
-    conn = sqlite3.connect('riwayat_v41_final.db')
+    conn = sqlite3.connect('riwayat_v42_fix.db')
     c = conn.cursor()
     c.execute('''UPDATE user_settings SET nama=?, nip=?, kpm=?, prov=?, kab=?, kec=?, kel=? WHERE id=1''', (nama, nip, kpm, prov, kab, kec, kel))
     conn.commit(); conn.close()
 
 def simpan_riwayat(rhk, judul, lokasi):
     try:
-        conn = sqlite3.connect('riwayat_v41_final.db')
+        conn = sqlite3.connect('riwayat_v42_fix.db')
         c = conn.cursor()
         tgl = datetime.now().strftime("%Y-%m-%d %H:%M")
         c.execute('INSERT INTO riwayat (tgl, rhk, judul, lokasi) VALUES (?, ?, ?, ?)', (tgl, rhk, judul, lokasi))
         conn.commit(); conn.close()
     except: pass
 
-# --- MANAJEMEN FOTO ---
+# --- TOOLS FOTO & PDF ---
 BASE_ARSIP = "Arsip_Foto_Kegiatan"
 
 def compress_image(uploaded_file, quality=70, max_width=800):
@@ -160,16 +163,6 @@ def clean_text_for_pdf(text):
     for k, v in replacements.items(): text = text.replace(k, v)
     return text.encode('latin-1', 'replace').decode('latin-1')
 
-def reset_states():
-    st.session_state['rhk2_queue'] = []
-    st.session_state['rhk4_queue'] = []
-    st.session_state['rhk7_queue'] = []
-    st.session_state['generated_file_data'] = None
-    st.session_state['rhk3_results'] = None
-    st.session_state['rhk2_results'] = []
-    st.session_state['rhk4_results'] = []
-    st.session_state['rhk7_results'] = []
-
 def update_tanggal_surat():
     bln = st.session_state.get('bln_val', 'JANUARI')
     th = st.session_state.get('th_val', '2026')
@@ -178,37 +171,13 @@ def update_tanggal_surat():
     day = "28" if bln == "FEBRUARI" else "30"
     st.session_state.tgl_val = f"{day} {bln.title()} {th}"
 
-def check_password():
-    """Mengembalikan True jika user berhasil login."""
-    if st.session_state.get("password_correct", False):
-        return True
-
-    st.markdown("<br><br>", unsafe_allow_html=True)
-    st.markdown("<h1 style='text-align: center;'>🔐 LOGIN APLIKASI</h1>", unsafe_allow_html=True)
-    st.markdown("<p style='text-align: center;'>Silakan masuk untuk mengakses sistem RHK</p>", unsafe_allow_html=True)
-    
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
-        input_user = st.text_input("Username")
-        input_pass = st.text_input("Password", type="password")
-        if st.button("MASUK / LOGIN", type="primary", use_container_width=True):
-            if input_user in DAFTAR_USER and DAFTAR_USER[input_user] == input_pass:
-                st.session_state["password_correct"] = True
-                st.session_state["username"] = input_user
-                st.rerun()
-            else:
-                st.error("😕 Username atau Password Salah!")
-    return False
-
 # ==========================================
-# 3. ENGINE AI & GENERATOR DOKUMEN
+# 3. ENGINE AI & DOKUMEN GENERATOR
 # ==========================================
 def generate_isi_laporan(topik, detail, kpm_total, kpm_fokus, bulan, lokasi_lengkap, analisis="", app_info="", ket_info=""):
-    # API KEY (WAJIB DIISI)
-    GOOGLE_API_KEY = "MASUKKAN_KEY_GOOGLE_ANDA_DISINI" 
-    
     try:
-        genai.configure(api_key=GOOGLE_API_KEY)
+        # Gunakan API Key yang sudah didefinisikan di atas
+        genai.configure(api_key=GOOGLE_API_KEY_MANUAL)
         model = genai.GenerativeModel('gemini-1.5-flash')
         
         prompt = f"""
@@ -322,9 +291,8 @@ def create_word_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
 
 def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
     pdf = FPDF(); pdf.set_margins(25, 20, 25); pdf.add_page(); pdf.set_font("Times", size=12)
-    def J(txt): pdf.multi_cell(0, 6, clean_text_for_pdf(txt), align='J')
-    def TXT(s): return clean_text_for_pdf(s)
     def J_indent(txt): pdf.multi_cell(0, 6, "       " + clean_text_for_pdf(txt), align='J')
+    def TXT(s): return clean_text_for_pdf(s)
 
     if kop:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp: tmp.write(kop); pth=tmp.name
@@ -384,29 +352,54 @@ def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
     return pdf.output(dest='S').encode('latin-1')
 
 # ==========================================
-# 6. LOGIKA UTAMA (MAIN APP)
+# 4. FUNGSI LOGIN & APP UTAMA
 # ==========================================
-if check_password():
-    # --- SIDEBAR LOGOUT ---
+def check_password():
+    if st.session_state.get("password_correct", False):
+        return True
+
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    st.markdown("<h1 style='text-align: center;'>🔐 LOGIN APLIKASI</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: center;'>Silakan masuk untuk mengakses sistem RHK</p>", unsafe_allow_html=True)
+    
+    col1, col2, col3 = st.columns([1, 2, 1])
+    with col2:
+        user = st.text_input("Username")
+        pwd = st.text_input("Password", type="password")
+        if st.button("MASUK / LOGIN", type="primary", use_container_width=True):
+            if user in DAFTAR_USER and DAFTAR_USER[user] == pwd:
+                st.session_state["password_correct"] = True
+                st.session_state["username"] = user
+                st.rerun()
+            else:
+                st.error("😕 Username atau Password Salah!")
+    return False
+
+def main_app():
+    # --- TOMBOL LOGOUT ---
     with st.sidebar:
         st.write(f"👤 Login: **{st.session_state.get('username')}**")
         if st.button("🔒 Logout", type="secondary"):
             st.session_state["password_correct"] = False
             st.rerun()
 
-    # --- INIT STATE & DB ---
+    # --- INIT DB & STATE (Agar tidak KeyError) ---
     init_db()
-    if st.session_state['page'] is None: st.session_state['page'] = 'home'
+    if 'page' not in st.session_state or st.session_state['page'] is None: 
+        st.session_state['page'] = 'home'
+    
     keys = ['selected_rhk', 'kop_bytes', 'ttd_bytes', 'db_kpm', 'graduasi_raw', 'graduasi_fix', 
             'generated_file_data', 'rhk3_results', 'rhk2_queue', 'rhk2_results', 
             'rhk4_queue', 'rhk4_results', 'rhk7_queue', 'rhk7_results', 'tgl_val', 'bln_val', 'th_val'] 
     for k in keys:
         if k not in st.session_state: st.session_state[k] = None
+    
+    # Init Lists (Wajib)
     if st.session_state['rhk2_queue'] is None: st.session_state['rhk2_queue'] = []
     if st.session_state['rhk4_queue'] is None: st.session_state['rhk4_queue'] = []
     if st.session_state['rhk7_queue'] is None: st.session_state['rhk7_queue'] = []
 
-    # --- SIDEBAR INPUT ---
+    # --- SIDEBAR MENU ---
     u_nama, u_nip, u_kpm, u_prov, u_kab, u_kec, u_kel = get_user_settings()
     st.sidebar.header("👤 Profil Pendamping")
     nama = st.sidebar.text_input("Nama Lengkap", u_nama, key="nama_val")
@@ -470,7 +463,7 @@ if check_password():
         
         st.divider(); st.subheader(f"{current_rhk}")
         
-        # --- JUDUL KOP ---
+        # --- JUDUL KOP OTOMATIS ---
         def_judul = "KEGIATAN"
         if "RHK 1" in current_rhk: def_judul = "KEGIATAN PENYALURAN BANTUAN SOSIAL"
         elif "RHK 2" in current_rhk: def_judul = "PELAKSANAAN P2K2 (FDS)"
@@ -635,3 +628,7 @@ if check_password():
                 c1, c2 = st.columns(2)
                 c1.download_button("📄 Download WORD", files['word'], f"{files['name']}.docx", "application/docx")
                 c2.download_button("📕 Download PDF", files['pdf'], f"{files['name']}.pdf", "application/pdf")
+
+# --- MAIN EXECUTION ---
+if check_password():
+    main_app()
