@@ -722,7 +722,19 @@ if check_password():
         if is_rhk3:
             st.info("ℹ️ RHK 3: Pilih KPM dari Excel.")
             template_df = pd.DataFrame({"Nama": ["ARJO"], "NIK": ["123"], "Alamat": ["Dusun A"], "Kategori": ["Sejahtera"], "Status":["Graduasi"], "Alasan":["Mampu"]})
-            st.download_button("📥 Template Excel", template_df.to_csv(index=False).encode('utf-8'), "template.csv", "text/csv")
+            
+            # --- UBAH KE XLSX ---
+            buffer = io.BytesIO()
+            template_df.to_excel(buffer, index=False)
+            buffer.seek(0)
+            
+            st.download_button(
+                label="📥 Template Excel (XLSX)",
+                data=buffer,
+                file_name="template_graduasi.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            )
+            # --------------------
             
             upl_grad = st.file_uploader("Upload Excel Graduasi", type=['xlsx', 'csv'])
             if upl_grad:
