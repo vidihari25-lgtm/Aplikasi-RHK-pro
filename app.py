@@ -18,7 +18,7 @@ import re
 # ==========================================
 # 1. KONFIGURASI HALAMAN
 # ==========================================
-st.set_page_config(page_title="Aplikasi RHK PKH Pro", layout="wide")
+st.set_page_config(page_title="Aplikasi RHK PKH Pro", layout="wide", page_icon="📊")
 
 # --- DAFTAR USER & PASSWORD ---
 DAFTAR_USER = {
@@ -96,6 +96,36 @@ if check_password():
     # 3. SETUP & INIT STATE
     # ==========================================
 
+    # --- CUSTOM CSS UNTUK TATA LETAK ---
+    st.markdown("""
+        <style>
+        /* 1. KUSTOMISASI TOMBOL SIDEBAR (LOGOUT) */
+        section[data-testid="stSidebar"] div.stButton > button {
+            border-radius: 8px !important; /* Kotak dengan sudut halus */
+            width: 100%;
+            border: 1px solid #dcdcdc;
+            background-color: #f9f9f9;
+            color: #333;
+            font-size: 14px;
+            padding: 8px 12px;
+            box-shadow: none;
+            height: auto;
+            margin-top: 10px;
+        }
+        section[data-testid="stSidebar"] div.stButton > button:hover {
+            border-color: #ff4b4b;
+            color: #ff4b4b;
+            background-color: #fff;
+        }
+
+        /* 2. KUSTOMISASI TOMBOL UTAMA (DASHBOARD MENU) */
+        /* Menargetkan tombol di area utama agar menjadi PERSEGI */
+        div.stButton > button {
+            white-space: pre-wrap !important; /* Agar teks bisa turun baris */
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
     # --- TOMBOL LOGOUT ---
     with st.sidebar:
         st.write(f"👤 Login: **{st.session_state.get('username', 'User')}**")
@@ -115,7 +145,6 @@ if check_password():
         if k not in st.session_state: st.session_state[k] = None
 
     # --- LOGIKA PERSISTENCE HALAMAN ---
-    # Mengembalikan user ke halaman terakhir saat refresh
     if "page" in st.query_params:
         st.session_state['page'] = st.query_params["page"]
     if "rhk" in st.query_params:
@@ -157,7 +186,7 @@ if check_password():
         c.execute('''CREATE TABLE IF NOT EXISTS user_settings (id INTEGER PRIMARY KEY, nama TEXT, nip TEXT, kpm INTEGER, prov TEXT, kab TEXT, kec TEXT, kel TEXT)''')
         c.execute('SELECT count(*) FROM user_settings')
         if c.fetchone()[0] == 0:
-            c.execute('INSERT INTO user_settings (id, nama, nip, kpm, prov, kab, kec, kel) VALUES (1, ?, ?, ?, ?, ?, ?, ?)', ("Vidi Hari Suci", "199103252025211054", 120, "Lampung", "Lampung Tengah", "Punggur", "Mojopahit"))
+            c.execute('INSERT INTO user_settings (id, nama, nip, kpm, prov, kab, kec, kel) VALUES (1, ?, ?, ?, ?, ?, ?, ?)', ("Vidi Hari Suci", "123456", 250, "Lampung", "Lampung Tengah", "Punggur", "Mojopahit"))
         conn.commit(); conn.close()
 
     def get_user_settings():
@@ -559,12 +588,51 @@ if check_password():
             st.sidebar.success("Profil Tersimpan!")
 
     def show_dashboard():
-        st.markdown("""<style>div.stButton>button{width:100%;height:160px;font-size:15px;font-weight:bold;border-radius:15px;box-shadow:0 4px 6px rgba(0,0,0,0.1);}</style>""", unsafe_allow_html=True)
+        # --- CSS KHUSUS UNTUK MEMBUAT TOMBOL DASHBOARD PERSEGI (1:1) DAN TEKS BESAR ---
+        st.markdown("""
+            <style>
+            /* Mengubah grid tombol utama menjadi persegi dan teks besar */
+            div[data-testid="column"] > div > div > div > div > div > div.stButton > button {
+                width: 100%;
+                aspect-ratio: 1 / 1; /* Rasio 1:1 untuk kotak sempurna */
+                border-radius: 12px;
+                border: 2px solid #f0f0f0;
+                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                display: flex;
+                flex-direction: column;
+                justify-content: center;
+                align-items: center;
+                text-align: center;
+                padding: 10px;
+                height: auto !important; /* Biarkan aspect-ratio mengatur tinggi */
+            }
+            
+            /* Mengatur Ukuran Teks di Dalam Tombol */
+            div[data-testid="column"] > div > div > div > div > div > div.stButton > button p {
+                font-size: 20px !important; /* Memperbesar tulisan */
+                font-weight: 700 !important;
+                line-height: 1.4 !important;
+            }
+
+            /* Efek Hover */
+            div[data-testid="column"] > div > div > div > div > div > div.stButton > button:hover {
+                border-color: #ff4b4b;
+                transform: scale(1.02);
+                transition: transform 0.2s;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+
         st.title("📂 Aplikasi RHK PKH Pro"); st.markdown("### Menu Utama")
         rhk_keys = list(CONFIG_LAPORAN.keys()); cols = st.columns(4)
         for i, rhk in enumerate(rhk_keys):
             icon = "💸" if "RHK 1" in rhk else "📚" if "RHK 2" in rhk else "🎓" if "RHK 3" in rhk else "📝" if "RHK 4" in rhk else "👥" if "RHK 5" in rhk else "🆘" if "RHK 6" in rhk else "📢"
-            label = f"{icon}\n{rhk.split('–')[0].strip()}\n{rhk.split('–')[-1].strip()}"
+            
+            # --- UPDATE LABEL: Judul di Baris 1, Keterangan di Baris 2 ---
+            code = rhk.split('–')[0].strip()  # Contoh: RHK 1
+            title = rhk.split('–')[-1].strip() # Contoh: Laporan Penyaluran
+            label = f"{icon} {code}\n\n{title}" # Double newline untuk jarak yang bagus
+            
             with cols[i % 4]:
                 if st.button(label, key=f"btn_{i}"):
                     st.session_state['selected_rhk'] = rhk; st.session_state['page'] = 'detail'
@@ -782,4 +850,3 @@ if check_password():
     render_sidebar()
     if st.session_state['page'] == 'home': show_dashboard()
     elif st.session_state['page'] == 'detail': show_detail_page()
-
