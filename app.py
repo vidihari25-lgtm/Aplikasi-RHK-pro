@@ -99,9 +99,9 @@ if check_password():
     # --- CUSTOM CSS UNTUK TATA LETAK ---
     st.markdown("""
         <style>
-        /* 1. KUSTOMISASI TOMBOL SIDEBAR (LOGOUT) */
+        /* 1. KUSTOMISASI TOMBOL SIDEBAR (LOGOUT) - KOTAK RAPI */
         section[data-testid="stSidebar"] div.stButton > button {
-            border-radius: 8px !important; /* Kotak dengan sudut halus */
+            border-radius: 8px !important;
             width: 100%;
             border: 1px solid #dcdcdc;
             background-color: #f9f9f9;
@@ -116,12 +116,6 @@ if check_password():
             border-color: #ff4b4b;
             color: #ff4b4b;
             background-color: #fff;
-        }
-
-        /* 2. KUSTOMISASI TOMBOL UTAMA (DASHBOARD MENU) */
-        /* Menargetkan tombol di area utama agar menjadi PERSEGI */
-        div.stButton > button {
-            white-space: pre-wrap !important; /* Agar teks bisa turun baris */
         }
         </style>
     """, unsafe_allow_html=True)
@@ -588,37 +582,46 @@ if check_password():
             st.sidebar.success("Profil Tersimpan!")
 
     def show_dashboard():
-        # --- CSS KHUSUS UNTUK MEMBUAT TOMBOL DASHBOARD PERSEGI (1:1) DAN TEKS BESAR ---
+        # --- CSS KHUSUS TOMBOL KOTAK + TEXT HIRARKI ---
         st.markdown("""
             <style>
-            /* Mengubah grid tombol utama menjadi persegi dan teks besar */
-            div[data-testid="column"] > div > div > div > div > div > div.stButton > button {
-                width: 100%;
-                aspect-ratio: 1 / 1; /* Rasio 1:1 untuk kotak sempurna */
+            /* Reset bentuk tombol utama menjadi KOTAK PERSEGI (1:1) */
+            div[data-testid="column"] button {
+                width: 100% !important;
+                aspect-ratio: 1 / 1 !important; /* Kotak */
+                height: auto !important;
                 border-radius: 12px;
                 border: 2px solid #f0f0f0;
-                box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+                padding: 10px !important;
                 display: flex;
                 flex-direction: column;
                 justify-content: center;
                 align-items: center;
-                text-align: center;
-                padding: 10px;
-                height: auto !important; /* Biarkan aspect-ratio mengatur tinggi */
+                white-space: pre-wrap !important;
             }
             
-            /* Mengatur Ukuran Teks di Dalam Tombol */
-            div[data-testid="column"] > div > div > div > div > div > div.stButton > button p {
-                font-size: 20px !important; /* Memperbesar tulisan */
-                font-weight: 700 !important;
-                line-height: 1.4 !important;
+            /* GAYA TEKS UMUM (KETERANGAN - Baris 2 dst) */
+            div[data-testid="column"] button p {
+                font-size: 14px !important; /* Ukuran keterangan "menyesuaikan" */
+                font-weight: 500 !important;
+                line-height: 1.3 !important;
+                margin: 0 !important;
+            }
+
+            /* GAYA TEKS BARIS PERTAMA (JUDUL RHK - Baris 1) */
+            div[data-testid="column"] button p::first-line {
+                font-size: 24px !important; /* Judul RHK Besar */
+                font-weight: 800 !important;
+                line-height: 2 !important; /* Jarak dengan keterangan */
+                color: #31333F;
             }
 
             /* Efek Hover */
-            div[data-testid="column"] > div > div > div > div > div > div.stButton > button:hover {
-                border-color: #ff4b4b;
+            div[data-testid="column"] button:hover {
+                border-color: #ff4b4b !important;
                 transform: scale(1.02);
-                transition: transform 0.2s;
+                transition: 0.2s;
+                background-color: #fffafb;
             }
             </style>
         """, unsafe_allow_html=True)
@@ -628,10 +631,10 @@ if check_password():
         for i, rhk in enumerate(rhk_keys):
             icon = "💸" if "RHK 1" in rhk else "📚" if "RHK 2" in rhk else "🎓" if "RHK 3" in rhk else "📝" if "RHK 4" in rhk else "👥" if "RHK 5" in rhk else "🆘" if "RHK 6" in rhk else "📢"
             
-            # --- UPDATE LABEL: Judul di Baris 1, Keterangan di Baris 2 ---
-            code = rhk.split('–')[0].strip()  # Contoh: RHK 1
-            title = rhk.split('–')[-1].strip() # Contoh: Laporan Penyaluran
-            label = f"{icon} {code}\n\n{title}" # Double newline untuk jarak yang bagus
+            # --- FORMAT LABEL BARU ---
+            code = rhk.split('–')[0].strip()  # Ambil "RHK 1"
+            title = rhk.split('–')[-1].strip() # Ambil Judul
+            label = f"{icon} {code}\n\n{title}" # \n\n untuk memisahkan baris
             
             with cols[i % 4]:
                 if st.button(label, key=f"btn_{i}"):
