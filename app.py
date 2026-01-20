@@ -662,7 +662,9 @@ if check_password():
                 
                 res = []; prog = st.progress(0); stat = st.empty()
                 for i, kpm in enumerate(kpms):
-                    nm = str(kpm.get('Nama', 'KPM')); stat.text(f"⏳ Memproses {nm}...")
+                    nm = str(kpm.get('Nama', 'KPM'))
+                    stat.info(f"🔄 ({i+1}/{len(kpms)}) Sedang Memproses: **{nm}**... (Mohon tunggu)")
+                    time.sleep(3) # DELAY DISINI
                     data = generate_isi_laporan(current_rhk, f"Laporan Graduasi: {nm}", meta['kpm'], nm, meta['bulan'], lokasi_lengkap, ket_info=ket_global)
                     if data:
                         ex = {'desc': f"KPM: {nm}. {ket_global}"}
@@ -705,7 +707,9 @@ if check_password():
                 if c2.button("🚀 GENERATE SEMUA", type="primary"):
                     res = []; prog = st.progress(0); stat = st.empty()
                     for i, item in enumerate(q):
-                        nm = item['modul']; stat.text(f"⏳ Proses {nm}...")
+                        nm = item['modul']; 
+                        stat.info(f"🔄 ({i+1}/{len(q)}) Sedang Memproses: **{nm}**... (Mohon tunggu)")
+                        time.sleep(3) # DELAY DISINI
                         dtl = f"Kegiatan: {nm}. {item.get('desc')}"
                         
                         if "RHK 7" in current_rhk:
@@ -746,17 +750,25 @@ if check_password():
             if st.button("🚀 Buat Laporan", type="primary"):
                 if new_ups: [auto_save_photo_local(f, current_rhk, meta['bulan']) for f in new_ups]
                 full_desc = f"Kegiatan: {judul_keg}. {ket}"
-                with st.spinner("Memproses AI..."):
+                
+                with st.status("🚀 Sedang Menyiapkan Laporan...", expanded=True) as status:
+                    st.write("⏳ Menganalisis data kegiatan...")
+                    time.sleep(2) # DELAY DISINI
+                    st.write("🤖 Menghubungi Google Gemini AI...")
                     d = generate_isi_laporan(current_rhk, judul_keg, meta['kpm'], f"{meta['kpm']} Peserta", meta['bulan'], lokasi_lengkap, ket_info=full_desc)
                     if d:
+                        st.write("📄 Menyusun file Word & PDF...")
                         [p.seek(0) for p in photos]
                         w = create_word_doc(d, meta, photos, kop, ttd, {'desc':full_desc}).getvalue()
                         [p.seek(0) for p in photos]
                         p = create_pdf_doc(d, meta, photos, kop, ttd, {'desc':full_desc})
                         st.session_state['generated_file_data'] = {'name': current_rhk, 'word': w, 'pdf': p}
                         simpan_riwayat(current_rhk, "Generated", meta['kel'])
+                        status.update(label="✅ Selesai!", state="complete", expanded=False)
                         st.success("Berhasil!"); st.rerun()
-                    else: st.error("Gagal generate konten AI.")
+                    else: 
+                        status.update(label="❌ Gagal!", state="error", expanded=True)
+                        st.error("Gagal generate konten AI.")
 
             f = st.session_state.get('generated_file_data')
             if f:
