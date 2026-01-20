@@ -26,12 +26,20 @@ DAFTAR_USER = {
     "user": "user"
 }
 
-# --- SISTEM KEAMANAN (LOGIN DENGAN TOMBOL) ---
+# --- SISTEM KEAMANAN (LOGIN DENGAN URL PERSISTENCE) ---
 def check_password():
     """Mengembalikan True jika user berhasil login."""
     
-    # Cek apakah user sudah login sebelumnya di session state
+    # 1. Cek apakah di memori aplikasi sudah login?
     if st.session_state.get("password_correct", False):
+        return True
+
+    # 2. Cek URL Browser (Agar tahan Refresh)
+    # Jika URL mengandung data login yang valid, otomatis login kembali
+    qp = st.query_params
+    if qp.get("auth") == "valid" and qp.get("user") in DAFTAR_USER:
+        st.session_state["password_correct"] = True
+        st.session_state["username"] = qp.get("user")
         return True
 
     # TAMPILAN HALAMAN LOGIN
@@ -41,16 +49,22 @@ def check_password():
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        # Input Username & Password (Diberi key agar state terjaga)
+        # Input Username & Password
         input_user = st.text_input("Username", key="login_user")
         input_pass = st.text_input("Password", type="password", key="login_pass")
         
-        # TOMBOL LOGIN (Action Trigger)
+        # TOMBOL LOGIN
         if st.button("MASUK / LOGIN", type="primary", use_container_width=True):
             if input_user in DAFTAR_USER and DAFTAR_USER[input_user] == input_pass:
+                # Set Session State
                 st.session_state["password_correct"] = True
-                st.session_state["username"] = input_user # Simpan nama user
-                st.rerun() # Refresh halaman untuk masuk ke aplikasi
+                st.session_state["username"] = input_user
+                
+                # UPDATE URL AGAR TAHAN REFRESH
+                st.query_params["auth"] = "valid"
+                st.query_params["user"] = input_user
+                
+                st.rerun()
             else:
                 st.error("😕 Username atau Password Salah!")
                 
@@ -77,9 +91,8 @@ if check_password():
         if st.button("🔒 Logout", type="secondary"):
             # Reset status login
             st.session_state["password_correct"] = False
-            # Bersihkan query params agar URL bersih saat logout
+            # BERSIHKAN URL AGAR TIDAK AUTO-LOGIN
             st.query_params.clear()
-            # Rerun untuk kembali ke halaman login
             st.rerun()
 
     # --- SESSION STATE ---
@@ -93,15 +106,15 @@ if check_password():
     for k in keys:
         if k not in st.session_state: st.session_state[k] = None
 
-    # --- LOGIKA PERSISTENCE (Agar Refresh Tetap di Halaman) ---
-    # Cek apakah ada data di URL (Query Params)
+    # --- LOGIKA PERSISTENCE HALAMAN (Agar Refresh Tetap di Halaman) ---
+    # Jika URL memiliki parameter page/rhk, kembalikan user ke sana
     if "page" in st.query_params:
         st.session_state['page'] = st.query_params["page"]
     
     if "rhk" in st.query_params:
         st.session_state['selected_rhk'] = st.query_params["rhk"]
 
-    # Init State Default jika URL kosong
+    # Init Default
     if st.session_state['rhk2_queue'] is None: st.session_state['rhk2_queue'] = []
     if st.session_state['rhk4_queue'] is None: st.session_state['rhk4_queue'] = []
     if st.session_state['rhk7_queue'] is None: st.session_state['rhk7_queue'] = []
