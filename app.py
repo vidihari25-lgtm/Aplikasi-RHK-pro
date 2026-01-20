@@ -15,11 +15,11 @@ from PIL import Image
 import tempfile
 
 # ==========================================
-# 1. KONFIGURASI & INISIALISASI (WAJIB DI ATAS)
+# 1. KONFIGURASI & INISIALISASI
 # ==========================================
 st.set_page_config(page_title="Aplikasi RHK PKH Pro", layout="wide")
 
-# --- INISIALISASI STATE (Agar Tidak Error KeyError) ---
+# --- INISIALISASI STATE ---
 if 'page' not in st.session_state: st.session_state['page'] = 'home'
 if 'selected_rhk' not in st.session_state: st.session_state['selected_rhk'] = None
 if 'rhk2_queue' not in st.session_state: st.session_state['rhk2_queue'] = []
@@ -44,21 +44,10 @@ if 'password_correct' not in st.session_state: st.session_state['password_correc
 # 2. LOGIKA API KEY (SAFE MODE)
 # ==========================================
 def get_api_key():
-    """
-    Mencari API Key dengan urutan prioritas:
-    1. Streamlit Secrets (Paling Aman untuk Web)
-    2. Environment Variable
-    3. Placeholder Manual (Hanya untuk Lokal)
-    """
-    # Cek Secrets (Cloud) - INI YANG MEMBUAT AMAN DI GITHUB
     if "GOOGLE_API_KEY" in st.secrets:
         return st.secrets["GOOGLE_API_KEY"]
-    
-    # Cek Environment (Docker/Lokal)
     if os.getenv("GOOGLE_API_KEY"):
         return os.getenv("GOOGLE_API_KEY")
-    
-    # Placeholder (Jangan diisi key asli disini jika mau upload ke GitHub)
     return "MASUKKAN_KEY_JIKA_DI_LOCAL_COMPUTER"
 
 FINAL_API_KEY = get_api_key()
@@ -66,7 +55,6 @@ FINAL_API_KEY = get_api_key()
 # ==========================================
 # 3. DATABASE & USER CONFIG
 # ==========================================
-# Cek User di Secrets atau Default
 if "users" in st.secrets:
     DAFTAR_USER = st.secrets["users"]
 else:
@@ -93,7 +81,7 @@ CONFIG_LAPORAN = {
 }
 
 def init_db():
-    conn = sqlite3.connect('riwayat_v48.db')
+    conn = sqlite3.connect('riwayat_v49.db')
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS riwayat (id INTEGER PRIMARY KEY, tgl TEXT, rhk TEXT, judul TEXT, lokasi TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS user_settings (
@@ -107,7 +95,7 @@ def init_db():
 
 def get_user_settings():
     try:
-        conn = sqlite3.connect('riwayat_v48.db')
+        conn = sqlite3.connect('riwayat_v49.db')
         c = conn.cursor()
         c.execute('SELECT nama, nip, kpm, prov, kab, kec, kel FROM user_settings WHERE id=1')
         data = c.fetchone()
@@ -117,14 +105,14 @@ def get_user_settings():
         return ("User", "-", 0, "-", "-", "-", "-")
 
 def save_user_settings(nama, nip, kpm, prov, kab, kec, kel):
-    conn = sqlite3.connect('riwayat_v48.db')
+    conn = sqlite3.connect('riwayat_v49.db')
     c = conn.cursor()
     c.execute('''UPDATE user_settings SET nama=?, nip=?, kpm=?, prov=?, kab=?, kec=?, kel=? WHERE id=1''', (nama, nip, kpm, prov, kab, kec, kel))
     conn.commit(); conn.close()
 
 def simpan_riwayat(rhk, judul, lokasi):
     try:
-        conn = sqlite3.connect('riwayat_v48.db')
+        conn = sqlite3.connect('riwayat_v49.db')
         c = conn.cursor()
         tgl = datetime.now().strftime("%Y-%m-%d %H:%M")
         c.execute('INSERT INTO riwayat (tgl, rhk, judul, lokasi) VALUES (?, ?, ?, ?)', (tgl, rhk, judul, lokasi))
@@ -224,19 +212,17 @@ def update_tanggal_surat():
     st.session_state.tgl_val = f"{day} {bln.title()} {th}"
 
 # ==========================================
-# 5. GENERATOR DOKUMEN (AI MODEL: FLASH LATEST)
+# 5. GENERATOR DOKUMEN (AI: FLASH LATEST)
 # ==========================================
 def generate_isi_laporan(topik, detail, kpm_total, kpm_fokus, bulan, lokasi_lengkap, analisis="", app_info="", ket_info=""):
-    # VALIDASI API KEY SEBELUM JALAN
     if not FINAL_API_KEY or "MASUKKAN" in FINAL_API_KEY:
         st.error("⚠️ API Key Google tidak ditemukan di Secrets! Harap isi Secrets di Streamlit Cloud.")
         return None
 
     try:
         genai.configure(api_key=FINAL_API_KEY)
-        
-        # MENGGUNAKAN MODEL SESUAI PERMINTAAN
-        models_to_try = ['gemini-flash-latest', 'gemini-1.5-flash']
+        # Prioritas Model: Flash Latest
+        models_to_try = ['gemini-flash-latest', 'gemini-1.5-flash', 'gemini-pro']
         
         prompt = f"""
         Role: Pendamping PKH Profesional.
@@ -266,10 +252,10 @@ def generate_isi_laporan(topik, detail, kpm_total, kpm_fokus, bulan, lokasi_leng
                 model = genai.GenerativeModel(model_name)
                 response = model.generate_content(prompt)
                 response_text = response.text
-                break # Jika berhasil, keluar dari loop
+                break
             except Exception as e:
                 error_logs.append(f"{model_name}: {str(e)}")
-                continue # Coba model berikutnya
+                continue
         
         if not response_text:
             st.error(f"❌ Gagal Generate. Detail Error:\n{error_logs}")
@@ -595,8 +581,15 @@ def main_app():
                 if nu: 
                     for f in nu: auto_save_photo_local(f, current_rhk, meta['bulan'])
                 res = []; prog = st.progress(0); stat = st.empty()
+                
+                # --- LOOPING DENGAN DELAY & ANIMASI ---
+                total_kpm = len(kpms)
                 for i, k in enumerate(kpms):
-                    nk = str(k.get('Nama', 'KPM')); stat.text(f"Memproses: {nk}...")
+                    nk = str(k.get('Nama', 'KPM'))
+                    stat.info(f"⏳ [{i+1}/{total_kpm}] Sedang memproses data: **{nk}**... Mohon tunggu.")
+                    
+                    time.sleep(2) # DELAY ANTAR REQUEST (2 DETIK)
+                    
                     d = generate_isi_laporan(current_rhk, f"Graduasi: {nk}", meta['kpm'], nk, meta['bulan'], lokasi_lengkap, ket_info=ket)
                     if d:
                         ei = {'desc': f"KPM: {nk}. {ket}"}
@@ -605,7 +598,8 @@ def main_app():
                         for x in fp: x.seek(0)
                         p = create_pdf_doc(d, meta, fp, kop, ttd, ei, k)
                         res.append({'nama': nk, 'word': w.getvalue(), 'pdf': p})
-                    prog.progress((i+1)/len(kpms))
+                    prog.progress((i+1)/total_kpm)
+                
                 st.session_state['rhk3_results'] = res; st.success("Selesai!"); st.rerun()
             
             if st.session_state['rhk3_results']:
@@ -641,8 +635,15 @@ def main_app():
                 if c1.button("Hapus Antrian"): st.session_state[qk] = []; st.rerun()
                 if c2.button("🚀 GENERATE SEMUA", type="primary"):
                     res = []; prog = st.progress(0); stat = st.empty()
+                    
+                    # --- LOOPING DENGAN DELAY & ANIMASI ---
+                    total_q = len(q)
                     for idx, it in enumerate(q):
-                        mn = it['modul']; stat.text(f"Memproses: {mn}...")
+                        mn = it['modul']
+                        stat.info(f"⏳ [{idx+1}/{total_q}] Sedang menghubungi AI untuk: **{mn}**...")
+                        
+                        time.sleep(2) # DELAY ANTAR REQUEST (2 DETIK)
+                        
                         dk = f"Kegiatan: {mn}. {it.get('desc','')}"
                         if "RHK 7" in current_rhk:
                             ei = {'app': it.get('app'), 'desc': f"{dk} (Pelaksanaan)"}
@@ -664,14 +665,14 @@ def main_app():
                                 res.append({'nama': f"{mn} - Hasil", 'word': w.getvalue(), 'pdf': p})
                         else:
                             ei = {'app': it.get('app'), 'desc': dk}
-                            d = generate_isi_laporan(current_rhk, modul_name, meta['kpm'], "Peserta", meta['bulan'], lokasi_lengkap, "", it.get('app'), dk)
+                            d = generate_isi_laporan(current_rhk, judul_kop, meta['kpm'], "Peserta", meta['bulan'], lokasi_lengkap, "", it.get('app'), dk)
                             if d:
                                 for f in it['foto']: f.seek(0)
                                 w = create_word_doc(d, meta, it['foto'], kop, ttd, ei)
                                 for f in it['foto']: f.seek(0)
                                 p = create_pdf_doc(d, meta, it['foto'], kop, ttd, ei)
                                 res.append({'nama': mn, 'word': w.getvalue(), 'pdf': p})
-                        prog.progress((idx+1)/len(q))
+                        prog.progress((idx+1)/total_q)
                     st.session_state[rk] = res; stat.text("Selesai!"); st.rerun()
 
             if st.session_state.get(rk):
@@ -691,17 +692,22 @@ def main_app():
             if st.button("🚀 Buat Laporan", type="primary"):
                 if nu: 
                     for f in nu: auto_save_photo_local(f, current_rhk, meta['bulan'])
-                fd = f"Kegiatan: {js}. {kt}"
-                d = generate_isi_laporan(current_rhk, js, meta['kpm'], f"{meta['kpm']} Peserta", meta['bulan'], lokasi_lengkap, ket_info=fd)
-                if d:
-                    ei = {'desc': fd}
-                    for f in fp: f.seek(0)
-                    w = create_word_doc(d, meta, fp, kop, ttd, ei)
-                    for f in fp: f.seek(0)
-                    p = create_pdf_doc(d, meta, fp, kop, ttd, ei)
-                    st.session_state['generated_file_data'] = {'type': 'single', 'word': w.getvalue(), 'pdf': p, 'name': current_rhk}
-                    st.success("Berhasil!"); st.rerun()
-                simpan_riwayat(current_rhk, "Generated", meta['kel'])
+                
+                # ANIMASI SINGLE REQUEST
+                with st.spinner("⏳ Sedang menghubungi AI & Menyusun Laporan... Mohon tunggu sebentar."):
+                    time.sleep(2) # DELAY BUATAN AGAR TERLIHAT PROSESNYA
+                    
+                    fd = f"Kegiatan: {js}. {kt}"
+                    d = generate_isi_laporan(current_rhk, js, meta['kpm'], f"{meta['kpm']} Peserta", meta['bulan'], lokasi_lengkap, ket_info=fd)
+                    if d:
+                        ei = {'desc': fd}
+                        for f in fp: f.seek(0)
+                        w = create_word_doc(d, meta, fp, kop, ttd, ei)
+                        for f in fp: f.seek(0)
+                        p = create_pdf_doc(d, meta, fp, kop, ttd, ei)
+                        st.session_state['generated_file_data'] = {'type': 'single', 'word': w.getvalue(), 'pdf': p, 'name': current_rhk}
+                        st.success("Berhasil!"); st.rerun()
+                    simpan_riwayat(current_rhk, "Generated", meta['kel'])
 
             if st.session_state.get('generated_file_data'):
                 files = st.session_state['generated_file_data']; st.divider()
