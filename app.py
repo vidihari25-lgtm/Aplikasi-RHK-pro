@@ -15,11 +15,11 @@ from PIL import Image
 import tempfile
 
 # ==========================================
-# 1. KONFIGURASI & INISIALISASI
+# 1. KONFIGURASI & INISIALISASI (WAJIB DI ATAS)
 # ==========================================
 st.set_page_config(page_title="Aplikasi RHK PKH Pro", layout="wide")
 
-# --- INISIALISASI STATE (Wajib di Atas) ---
+# --- INISIALISASI STATE (Agar Tidak Error KeyError) ---
 if 'page' not in st.session_state: st.session_state['page'] = 'home'
 if 'selected_rhk' not in st.session_state: st.session_state['selected_rhk'] = None
 if 'rhk2_queue' not in st.session_state: st.session_state['rhk2_queue'] = []
@@ -44,15 +44,21 @@ if 'password_correct' not in st.session_state: st.session_state['password_correc
 # 2. LOGIKA API KEY (SAFE MODE)
 # ==========================================
 def get_api_key():
-    # 1. Cek Secrets (Prioritas)
+    """
+    Mencari API Key dengan urutan prioritas:
+    1. Streamlit Secrets (Paling Aman untuk Web)
+    2. Environment Variable
+    3. Placeholder Manual (Hanya untuk Lokal)
+    """
+    # Cek Secrets (Cloud) - INI YANG MEMBUAT AMAN DI GITHUB
     if "GOOGLE_API_KEY" in st.secrets:
         return st.secrets["GOOGLE_API_KEY"]
     
-    # 2. Cek Environment
+    # Cek Environment (Docker/Lokal)
     if os.getenv("GOOGLE_API_KEY"):
         return os.getenv("GOOGLE_API_KEY")
     
-    # 3. Placeholder (Jangan diisi key asli disini jika mau upload ke GitHub)
+    # Placeholder (Jangan diisi key asli disini jika mau upload ke GitHub)
     return "MASUKKAN_KEY_JIKA_DI_LOCAL_COMPUTER"
 
 FINAL_API_KEY = get_api_key()
@@ -60,6 +66,7 @@ FINAL_API_KEY = get_api_key()
 # ==========================================
 # 3. DATABASE & USER CONFIG
 # ==========================================
+# Cek User di Secrets atau Default
 if "users" in st.secrets:
     DAFTAR_USER = st.secrets["users"]
 else:
@@ -86,7 +93,7 @@ CONFIG_LAPORAN = {
 }
 
 def init_db():
-    conn = sqlite3.connect('riwayat_v47.db')
+    conn = sqlite3.connect('riwayat_v48.db')
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS riwayat (id INTEGER PRIMARY KEY, tgl TEXT, rhk TEXT, judul TEXT, lokasi TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS user_settings (
@@ -100,7 +107,7 @@ def init_db():
 
 def get_user_settings():
     try:
-        conn = sqlite3.connect('riwayat_v47.db')
+        conn = sqlite3.connect('riwayat_v48.db')
         c = conn.cursor()
         c.execute('SELECT nama, nip, kpm, prov, kab, kec, kel FROM user_settings WHERE id=1')
         data = c.fetchone()
@@ -110,14 +117,14 @@ def get_user_settings():
         return ("User", "-", 0, "-", "-", "-", "-")
 
 def save_user_settings(nama, nip, kpm, prov, kab, kec, kel):
-    conn = sqlite3.connect('riwayat_v47.db')
+    conn = sqlite3.connect('riwayat_v48.db')
     c = conn.cursor()
     c.execute('''UPDATE user_settings SET nama=?, nip=?, kpm=?, prov=?, kab=?, kec=?, kel=? WHERE id=1''', (nama, nip, kpm, prov, kab, kec, kel))
     conn.commit(); conn.close()
 
 def simpan_riwayat(rhk, judul, lokasi):
     try:
-        conn = sqlite3.connect('riwayat_v47.db')
+        conn = sqlite3.connect('riwayat_v48.db')
         c = conn.cursor()
         tgl = datetime.now().strftime("%Y-%m-%d %H:%M")
         c.execute('INSERT INTO riwayat (tgl, rhk, judul, lokasi) VALUES (?, ?, ?, ?)', (tgl, rhk, judul, lokasi))
@@ -217,19 +224,19 @@ def update_tanggal_surat():
     st.session_state.tgl_val = f"{day} {bln.title()} {th}"
 
 # ==========================================
-# 5. GENERATOR DOKUMEN (PERBAIKAN ERROR)
+# 5. GENERATOR DOKUMEN (AI MODEL: FLASH LATEST)
 # ==========================================
 def generate_isi_laporan(topik, detail, kpm_total, kpm_fokus, bulan, lokasi_lengkap, analisis="", app_info="", ket_info=""):
-    # CEK API KEY
+    # VALIDASI API KEY SEBELUM JALAN
     if not FINAL_API_KEY or "MASUKKAN" in FINAL_API_KEY:
-        st.error("⚠️ API Key Google tidak ditemukan di Secrets!")
+        st.error("⚠️ API Key Google tidak ditemukan di Secrets! Harap isi Secrets di Streamlit Cloud.")
         return None
 
     try:
         genai.configure(api_key=FINAL_API_KEY)
         
-        # COBA BEBERAPA MODEL (Agar jika satu gagal, coba yang lain)
-        models_to_try = ['gemini-1.5-flash', 'gemini-1.0-pro', 'gemini-pro']
+        # MENGGUNAKAN MODEL SESUAI PERMINTAAN
+        models_to_try = ['gemini-flash-latest', 'gemini-1.5-flash']
         
         prompt = f"""
         Role: Pendamping PKH Profesional.
@@ -265,7 +272,6 @@ def generate_isi_laporan(topik, detail, kpm_total, kpm_fokus, bulan, lokasi_leng
                 continue # Coba model berikutnya
         
         if not response_text:
-            # TAMPILKAN ERROR ASLINYA AGAR TAHU PENYEBABNYA
             st.error(f"❌ Gagal Generate. Detail Error:\n{error_logs}")
             return None
 
