@@ -356,39 +356,20 @@ if check_password():
 
         doc.add_paragraph("C. Hasil yang dicapai", style='Heading 1')
         
-        # --- PERUBAHAN TAMPILAN WORD (TABEL RAPI) ---
+        # --- TAMPILAN WORD (TABEL RAPI) ---
         if kpm_data and isinstance(kpm_data, dict):
-            # Gunakan Tabel agar alignment titik dua (:) rapi
-            p = doc.add_paragraph()
-            p.add_run("Profil KPM:").bold = True
-            
-            table = doc.add_table(rows=0, cols=3)
-            table.autofit = False
-            # Atur lebar kolom: Label, Titik Dua, Value
-            table.columns[0].width = Cm(5.5)
-            table.columns[1].width = Cm(0.5)
-            table.columns[2].width = Cm(10.0)
-            
-            fields_to_show = [
-                ("Nama", kpm_data.get('Nama', '-')),
-                ("NIK", kpm_data.get('NIK', '-')),
-                ("Alamat", kpm_data.get('Alamat', '-')),
-                ("Kategori Kesejahteraan", kpm_data.get('Kategori', '-')),
-                ("Status", kpm_data.get('Status', '-')),
-                ("Jenis Graduasi", kpm_data.get('Jenis Graduasi', '-')),
-                ("Tahun Bergabung PKH", kpm_data.get('Tahun Bergabung', '-')),
-                ("Jumlah Anggota Keluarga", kpm_data.get('Jumlah Anggota', '-')),
-                ("Alasan Graduasi", kpm_data.get('Alasan', '-'))
-            ]
-            
+            p = doc.add_paragraph(); p.add_run("Profil KPM:").bold = True
+            table = doc.add_table(rows=0, cols=3); table.autofit = False
+            table.columns[0].width = Cm(5.5); table.columns[1].width = Cm(0.5); table.columns[2].width = Cm(10.0)
+            fields_to_show = [("Nama", kpm_data.get('Nama', '-')), ("NIK", kpm_data.get('NIK', '-')),
+                ("Alamat", kpm_data.get('Alamat', '-')), ("Kategori Kesejahteraan", kpm_data.get('Kategori', '-')),
+                ("Status", kpm_data.get('Status', '-')), ("Jenis Graduasi", kpm_data.get('Jenis Graduasi', '-')),
+                ("Tahun Bergabung PKH", kpm_data.get('Tahun Bergabung', '-')), ("Jumlah Anggota Keluarga", kpm_data.get('Jumlah Anggota', '-')),
+                ("Alasan Graduasi", kpm_data.get('Alasan', '-'))]
             for label, val in fields_to_show:
                 row_cells = table.add_row().cells
-                row_cells[0].text = label
-                row_cells[1].text = ":"
-                row_cells[2].text = safe_str(val)
-                
-            doc.add_paragraph(" ") # Spasi setelah tabel
-        # -----------------------------------------------
+                row_cells[0].text = label; row_cells[1].text = ":"; row_cells[2].text = safe_str(val)
+            doc.add_paragraph(" ") 
 
         for i, item in enumerate(data.get('hasil', []), 1): add_numbered_item(i, item)
 
@@ -474,27 +455,16 @@ if check_password():
         pdf.ln(2); pdf.set_font("Times", "B", 12); pdf.cell(0, 8, "C. Hasil yang dicapai", ln=True)
         pdf.set_font("Times", "", 12)
         
-        # --- PERUBAHAN TAMPILAN PDF (ALIGNMENT RAPI) ---
+        # --- TAMPILAN PDF (ALIGNMENT RAPI) ---
         if kpm_data and isinstance(kpm_data, dict):
-            fields_to_show = [
-                ("Nama", kpm_data.get('Nama', '-')),
-                ("NIK", kpm_data.get('NIK', '-')),
-                ("Alamat", kpm_data.get('Alamat', '-')),
-                ("Kategori Kesejahteraan", kpm_data.get('Kategori', '-')),
-                ("Status", kpm_data.get('Status', '-')),
-                ("Jenis Graduasi", kpm_data.get('Jenis Graduasi', '-')),
-                ("Tahun Bergabung PKH", kpm_data.get('Tahun Bergabung', '-')),
-                ("Jumlah Anggota Keluarga", kpm_data.get('Jumlah Anggota', '-')),
-                ("Alasan Graduasi", kpm_data.get('Alasan', '-'))
-            ]
-            
+            fields_to_show = [("Nama", kpm_data.get('Nama', '-')), ("NIK", kpm_data.get('NIK', '-')),
+                ("Alamat", kpm_data.get('Alamat', '-')), ("Kategori Kesejahteraan", kpm_data.get('Kategori', '-')),
+                ("Status", kpm_data.get('Status', '-')), ("Jenis Graduasi", kpm_data.get('Jenis Graduasi', '-')),
+                ("Tahun Bergabung PKH", kpm_data.get('Tahun Bergabung', '-')), ("Jumlah Anggota Keluarga", kpm_data.get('Jumlah Anggota', '-')),
+                ("Alasan Graduasi", kpm_data.get('Alasan', '-'))]
             for label, val in fields_to_show:
-                pdf.cell(50, 6, TXT(label), 0, 0) # Label (width 50)
-                pdf.cell(5, 6, ":", 0, 0)       # Separator (width 5)
-                pdf.multi_cell(0, 6, TXT(safe_str(val)), 0, 1) # Value (sisa)
-            
+                pdf.cell(50, 6, TXT(label), 0, 0); pdf.cell(5, 6, ":", 0, 0); pdf.multi_cell(0, 6, TXT(safe_str(val)), 0, 1)
             pdf.ln(2)
-        # -----------------------------------------------
 
         for i, item in enumerate(data.get('hasil', []), 1):
             pdf.cell(10, 6, f"{i}.", 0, 0); pdf.multi_cell(0, 6, TXT(item))
@@ -521,6 +491,28 @@ if check_password():
         
         pdf.set_x(start_x); pdf.set_font("Times", "B", 12); pdf.cell(80, 5, TXT(meta['nama']), ln=True, align='C')
         pdf.set_x(start_x); pdf.set_font("Times", "", 12); pdf.cell(80, 5, TXT(f"NIP. {meta['nip']}"), ln=True, align='C')
+
+        # --- FIX: LOGIC FOTO UNTUK PDF ---
+        if imgs:
+            pdf.add_page(); pdf.set_font("Times", "B", 12)
+            pdf.cell(0, 10, "LAMPIRAN DOKUMENTASI", ln=True, align='C'); pdf.ln(5)
+            for i, img_data in enumerate(imgs):
+                if i > 0 and i % 2 == 0: 
+                    pdf.ln(60) # Pindah baris setiap 2 foto
+                    if pdf.get_y() > 250: pdf.add_page(); pdf.ln(10) # Cek halaman penuh
+                
+                x = 30 if i % 2 == 0 else 120; y = pdf.get_y()
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+                    img_data.seek(0); tmp.write(img_data.read()); tmp_path = tmp.name
+                try:
+                    pdf.image(tmp_path, x=x, y=y, w=70, h=50)
+                    pdf.set_xy(x, y + 52); pdf.set_font("Times", "", 9)
+                    pdf.multi_cell(70, 4, f"Dokumentasi {i+1}", align='C')
+                    pdf.set_xy(25, y) # Kembalikan cursor Y ke posisi baris saat ini
+                except: pass
+                finally: os.unlink(tmp_path)
+        # ----------------------------------
+
         return pdf.output(dest='S').encode('latin-1')
 
     # ==========================================
@@ -628,8 +620,6 @@ if check_password():
 
         if is_rhk3:
             st.info("ℹ️ RHK 3: Pilih KPM dari Excel.")
-            
-            # --- TEMPLATE DIPERBARUI SESUAI GAMBAR ---
             template_df = pd.DataFrame({
                 "Nama": ["ARJO SARDI"], 
                 "NIK": ["180206xxx"], 
