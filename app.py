@@ -15,12 +15,11 @@ from PIL import Image
 import tempfile
 
 # ==========================================
-# 1. KONFIGURASI & INISIALISASI (WAJIB DI ATAS)
+# 1. KONFIGURASI & INISIALISASI
 # ==========================================
 st.set_page_config(page_title="Aplikasi RHK PKH Pro", layout="wide")
 
-# --- INISIALISASI STATE (Agar Tidak Error KeyError) ---
-# Fungsi ini memastikan semua variabel session sudah siap sebelum dipakai
+# --- INISIALISASI STATE (Wajib di Atas) ---
 if 'page' not in st.session_state: st.session_state['page'] = 'home'
 if 'selected_rhk' not in st.session_state: st.session_state['selected_rhk'] = None
 if 'rhk2_queue' not in st.session_state: st.session_state['rhk2_queue'] = []
@@ -45,21 +44,15 @@ if 'password_correct' not in st.session_state: st.session_state['password_correc
 # 2. LOGIKA API KEY (SAFE MODE)
 # ==========================================
 def get_api_key():
-    """
-    Mencari API Key dengan urutan prioritas:
-    1. Streamlit Secrets (Paling Aman untuk Web)
-    2. Environment Variable
-    3. Placeholder Manual (Hanya untuk Lokal)
-    """
-    # Cek Secrets (Cloud)
+    # 1. Cek Secrets (Prioritas)
     if "GOOGLE_API_KEY" in st.secrets:
         return st.secrets["GOOGLE_API_KEY"]
     
-    # Cek Environment (Docker/Lokal)
+    # 2. Cek Environment
     if os.getenv("GOOGLE_API_KEY"):
         return os.getenv("GOOGLE_API_KEY")
     
-    # Placeholder (Jangan diisi key asli disini jika mau upload ke GitHub)
+    # 3. Placeholder (Jangan diisi key asli disini jika mau upload ke GitHub)
     return "MASUKKAN_KEY_JIKA_DI_LOCAL_COMPUTER"
 
 FINAL_API_KEY = get_api_key()
@@ -67,7 +60,6 @@ FINAL_API_KEY = get_api_key()
 # ==========================================
 # 3. DATABASE & USER CONFIG
 # ==========================================
-# Cek User di Secrets atau Default
 if "users" in st.secrets:
     DAFTAR_USER = st.secrets["users"]
 else:
@@ -94,7 +86,7 @@ CONFIG_LAPORAN = {
 }
 
 def init_db():
-    conn = sqlite3.connect('riwayat_v46.db')
+    conn = sqlite3.connect('riwayat_v47.db')
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS riwayat (id INTEGER PRIMARY KEY, tgl TEXT, rhk TEXT, judul TEXT, lokasi TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS user_settings (
@@ -108,7 +100,7 @@ def init_db():
 
 def get_user_settings():
     try:
-        conn = sqlite3.connect('riwayat_v46.db')
+        conn = sqlite3.connect('riwayat_v47.db')
         c = conn.cursor()
         c.execute('SELECT nama, nip, kpm, prov, kab, kec, kel FROM user_settings WHERE id=1')
         data = c.fetchone()
@@ -118,14 +110,14 @@ def get_user_settings():
         return ("User", "-", 0, "-", "-", "-", "-")
 
 def save_user_settings(nama, nip, kpm, prov, kab, kec, kel):
-    conn = sqlite3.connect('riwayat_v46.db')
+    conn = sqlite3.connect('riwayat_v47.db')
     c = conn.cursor()
     c.execute('''UPDATE user_settings SET nama=?, nip=?, kpm=?, prov=?, kab=?, kec=?, kel=? WHERE id=1''', (nama, nip, kpm, prov, kab, kec, kel))
     conn.commit(); conn.close()
 
 def simpan_riwayat(rhk, judul, lokasi):
     try:
-        conn = sqlite3.connect('riwayat_v46.db')
+        conn = sqlite3.connect('riwayat_v47.db')
         c = conn.cursor()
         tgl = datetime.now().strftime("%Y-%m-%d %H:%M")
         c.execute('INSERT INTO riwayat (tgl, rhk, judul, lokasi) VALUES (?, ?, ?, ?)', (tgl, rhk, judul, lokasi))
@@ -225,20 +217,19 @@ def update_tanggal_surat():
     st.session_state.tgl_val = f"{day} {bln.title()} {th}"
 
 # ==========================================
-# 5. GENERATOR DOKUMEN (AI & OFFICE)
+# 5. GENERATOR DOKUMEN (PERBAIKAN ERROR)
 # ==========================================
 def generate_isi_laporan(topik, detail, kpm_total, kpm_fokus, bulan, lokasi_lengkap, analisis="", app_info="", ket_info=""):
-    # VALIDASI API KEY SEBELUM JALAN
+    # CEK API KEY
     if not FINAL_API_KEY or "MASUKKAN" in FINAL_API_KEY:
-        st.error("⚠️ API Key Google tidak ditemukan di Secrets! Harap isi Secrets di Streamlit Cloud.")
+        st.error("⚠️ API Key Google tidak ditemukan di Secrets!")
         return None
 
     try:
         genai.configure(api_key=FINAL_API_KEY)
         
-        # STRATEGI MODEL: Coba Flash, jika gagal coba Pro
-        # Ini mengatasi Error 404 Model Not Found
-        models_to_try = ['gemini-1.5-flash', 'gemini-pro']
+        # COBA BEBERAPA MODEL (Agar jika satu gagal, coba yang lain)
+        models_to_try = ['gemini-1.5-flash', 'gemini-1.0-pro', 'gemini-pro']
         
         prompt = f"""
         Role: Pendamping PKH Profesional.
@@ -261,24 +252,28 @@ def generate_isi_laporan(topik, detail, kpm_total, kpm_fokus, bulan, lokasi_leng
         """
         
         response_text = None
+        error_logs = []
+
         for model_name in models_to_try:
             try:
                 model = genai.GenerativeModel(model_name)
                 response = model.generate_content(prompt)
                 response_text = response.text
-                break # Berhasil, keluar loop
-            except:
-                continue # Gagal, coba model lain
+                break # Jika berhasil, keluar dari loop
+            except Exception as e:
+                error_logs.append(f"{model_name}: {str(e)}")
+                continue # Coba model berikutnya
         
         if not response_text:
-            st.error("❌ Gagal menghubungi semua model AI. Cek kuota API.")
+            # TAMPILKAN ERROR ASLINYA AGAR TAHU PENYEBABNYA
+            st.error(f"❌ Gagal Generate. Detail Error:\n{error_logs}")
             return None
 
         import json
         return json.loads(response_text.replace("```json", "").replace("```", "").strip())
         
     except Exception as e:
-        st.error(f"Error Generate: {str(e)}")
+        st.error(f"Error Sistem: {str(e)}")
         return None
 
 def create_word_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
@@ -370,7 +365,6 @@ def create_word_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
                 except: pass
         bio = io.BytesIO(); doc.save(bio); return bio
     except Exception as e:
-        st.error(f"Gagal membuat Word: {e}")
         return None
 
 def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
@@ -438,11 +432,10 @@ def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
         pdf.set_x(start_x); pdf.set_font("Times", "", 12); pdf.cell(80, 5, TXT(f"NIP. {meta['nip']}"), ln=True, align='C')
         return pdf.output(dest='S').encode('latin-1')
     except Exception as e:
-        st.error(f"Gagal membuat PDF: {e}")
         return None
 
 # ==========================================
-# 6. UI UTAMA (MAIN APP)
+# 6. UI UTAMA & LOGIN
 # ==========================================
 def check_password():
     if st.session_state.get("password_correct", False):
@@ -465,14 +458,13 @@ def check_password():
     return False
 
 def main_app():
-    # --- TOMBOL LOGOUT ---
+    # --- LOGOUT ---
     with st.sidebar:
         st.write(f"👤 Login: **{st.session_state.get('username')}**")
         if st.button("🔒 Logout", type="secondary"):
             st.session_state["password_correct"] = False
             st.rerun()
 
-    # --- SIDEBAR INPUTS ---
     init_db()
     u_nama, u_nip, u_kpm, u_prov, u_kab, u_kec, u_kel = get_user_settings()
     
