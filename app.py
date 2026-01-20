@@ -30,7 +30,7 @@ DAFTAR_USER = {
 def check_password():
     """Mengembalikan True jika user berhasil login."""
     
-    # Cek apakah user sudah login sebelumnya
+    # Cek apakah user sudah login sebelumnya di session state
     if st.session_state.get("password_correct", False):
         return True
 
@@ -41,9 +41,9 @@ def check_password():
     
     col1, col2, col3 = st.columns([1, 2, 1])
     with col2:
-        # Input Username & Password
-        input_user = st.text_input("Username")
-        input_pass = st.text_input("Password", type="password")
+        # Input Username & Password (Diberi key agar state terjaga)
+        input_user = st.text_input("Username", key="login_user")
+        input_pass = st.text_input("Password", type="password", key="login_pass")
         
         # TOMBOL LOGIN (Action Trigger)
         if st.button("MASUK / LOGIN", type="primary", use_container_width=True):
@@ -77,6 +77,8 @@ if check_password():
         if st.button("🔒 Logout", type="secondary"):
             # Reset status login
             st.session_state["password_correct"] = False
+            # Bersihkan query params agar URL bersih saat logout
+            st.query_params.clear()
             # Rerun untuk kembali ke halaman login
             st.rerun()
 
@@ -91,6 +93,15 @@ if check_password():
     for k in keys:
         if k not in st.session_state: st.session_state[k] = None
 
+    # --- LOGIKA PERSISTENCE (Agar Refresh Tetap di Halaman) ---
+    # Cek apakah ada data di URL (Query Params)
+    if "page" in st.query_params:
+        st.session_state['page'] = st.query_params["page"]
+    
+    if "rhk" in st.query_params:
+        st.session_state['selected_rhk'] = st.query_params["rhk"]
+
+    # Init State Default jika URL kosong
     if st.session_state['rhk2_queue'] is None: st.session_state['rhk2_queue'] = []
     if st.session_state['rhk4_queue'] is None: st.session_state['rhk4_queue'] = []
     if st.session_state['rhk7_queue'] is None: st.session_state['rhk7_queue'] = []
@@ -572,8 +583,13 @@ if check_password():
             
             with cols[i % 4]:
                 if st.button(label, key=f"btn_{i}", use_container_width=True):
+                    # Set Session State
                     st.session_state['selected_rhk'] = rhk
                     st.session_state['page'] = 'detail'
+                    # UPDATE URL (QUERY PARAMS) untuk Persistence saat Refresh
+                    st.query_params["page"] = "detail"
+                    st.query_params["rhk"] = rhk
+                    
                     st.session_state['rhk2_queue'] = []
                     st.session_state['rhk4_queue'] = []
                     st.session_state['rhk7_queue'] = []
@@ -604,7 +620,14 @@ if check_password():
             st.caption("🚀 Navigasi Cepat:")
             nav_cols = st.columns(8)
             if nav_cols[0].button("🏠 HOME"):
-                st.session_state['page'] = 'home'; reset_states(); st.rerun()
+                st.session_state['page'] = 'home'
+                # Update URL kembali ke home
+                st.query_params["page"] = "home"
+                # Hapus param rhk agar bersih
+                if "rhk" in st.query_params: del st.query_params["rhk"]
+                
+                reset_states()
+                st.rerun()
             
             rhk_keys = list(CONFIG_LAPORAN.keys())
             col_idx = 1
@@ -613,7 +636,11 @@ if check_password():
                     short_name = rhk.split("–")[0].strip()
                     if col_idx < 8:
                         if nav_cols[col_idx].button(short_name, key=f"nav_{rhk}"):
-                            st.session_state['selected_rhk'] = rhk; reset_states(); st.rerun()
+                            st.session_state['selected_rhk'] = rhk
+                            # Update URL saat pindah RHK
+                            st.query_params["rhk"] = rhk
+                            reset_states()
+                            st.rerun()
                         col_idx += 1
         
         st.divider()
