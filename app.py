@@ -7,9 +7,6 @@ from fpdf import FPDF
 import io
 import pandas as pd
 import sqlite3
-import zipfile
-from datetime import datetime
-import time
 import os
 from PIL import Image
 import tempfile
@@ -52,9 +49,6 @@ def get_api_key():
             return st.secrets["GOOGLE_API_KEY"]
     except:
         pass
-    # Cek Environment Variable (Cadangan)
-    if os.getenv("GOOGLE_API_KEY"):
-        return os.getenv("GOOGLE_API_KEY")
     return None
 
 FINAL_API_KEY = get_api_key()
