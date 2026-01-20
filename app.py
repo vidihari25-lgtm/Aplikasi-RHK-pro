@@ -19,14 +19,14 @@ import tempfile
 # ==========================================
 st.set_page_config(page_title="Aplikasi RHK PKH Pro", layout="wide")
 
-# --- USERNAME & PASSWORD (Diatur Disini Agar Mudah) ---
+# --- USERNAME & PASSWORD (EDIT DISINI) ---
 DAFTAR_USER = {
     "admin": "admin123",
     "pendamping": "pkh2026",
     "user": "user"
 }
 
-# --- API KEY GOOGLE (Masukkan Disini) ---
+# --- API KEY (WAJIB DIISI) ---
 GOOGLE_API_KEY_MANUAL = "MASUKKAN_KEY_GOOGLE_ANDA_DISINI"
 
 # --- CONFIG DATA LAPORAN ---
@@ -51,12 +51,10 @@ CONFIG_LAPORAN = {
 }
 
 # ==========================================
-# 2. FUNGSI-FUNGSI PENDUKUNG (GLOBAL)
+# 2. FUNGSI DATABASE & TOOLS (GLOBAL)
 # ==========================================
-# Fungsi ditaruh di luar agar tidak kena Indentation Error
-
 def init_db():
-    conn = sqlite3.connect('riwayat_v42_fix.db')
+    conn = sqlite3.connect('riwayat_v42.db')
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS riwayat (id INTEGER PRIMARY KEY, tgl TEXT, rhk TEXT, judul TEXT, lokasi TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS user_settings (
@@ -69,7 +67,7 @@ def init_db():
     conn.commit(); conn.close()
 
 def get_user_settings():
-    conn = sqlite3.connect('riwayat_v42_fix.db')
+    conn = sqlite3.connect('riwayat_v42.db')
     c = conn.cursor()
     c.execute('SELECT nama, nip, kpm, prov, kab, kec, kel FROM user_settings WHERE id=1')
     data = c.fetchone()
@@ -77,21 +75,20 @@ def get_user_settings():
     return data
 
 def save_user_settings(nama, nip, kpm, prov, kab, kec, kel):
-    conn = sqlite3.connect('riwayat_v42_fix.db')
+    conn = sqlite3.connect('riwayat_v42.db')
     c = conn.cursor()
     c.execute('''UPDATE user_settings SET nama=?, nip=?, kpm=?, prov=?, kab=?, kec=?, kel=? WHERE id=1''', (nama, nip, kpm, prov, kab, kec, kel))
     conn.commit(); conn.close()
 
 def simpan_riwayat(rhk, judul, lokasi):
     try:
-        conn = sqlite3.connect('riwayat_v42_fix.db')
+        conn = sqlite3.connect('riwayat_v42.db')
         c = conn.cursor()
         tgl = datetime.now().strftime("%Y-%m-%d %H:%M")
         c.execute('INSERT INTO riwayat (tgl, rhk, judul, lokasi) VALUES (?, ?, ?, ?)', (tgl, rhk, judul, lokasi))
         conn.commit(); conn.close()
     except: pass
 
-# --- TOOLS FOTO & PDF ---
 BASE_ARSIP = "Arsip_Foto_Kegiatan"
 
 def compress_image(uploaded_file, quality=70, max_width=800):
@@ -163,6 +160,16 @@ def clean_text_for_pdf(text):
     for k, v in replacements.items(): text = text.replace(k, v)
     return text.encode('latin-1', 'replace').decode('latin-1')
 
+def reset_states():
+    st.session_state['rhk2_queue'] = []
+    st.session_state['rhk4_queue'] = []
+    st.session_state['rhk7_queue'] = []
+    st.session_state['generated_file_data'] = None
+    st.session_state['rhk3_results'] = None
+    st.session_state['rhk2_results'] = []
+    st.session_state['rhk4_results'] = []
+    st.session_state['rhk7_results'] = []
+
 def update_tanggal_surat():
     bln = st.session_state.get('bln_val', 'JANUARI')
     th = st.session_state.get('th_val', '2026')
@@ -171,12 +178,33 @@ def update_tanggal_surat():
     day = "28" if bln == "FEBRUARI" else "30"
     st.session_state.tgl_val = f"{day} {bln.title()} {th}"
 
+def init_session_state():
+    """Inisialisasi semua state agar tidak KeyError"""
+    keys = ['page', 'selected_rhk', 'kop_bytes', 'ttd_bytes', 'db_kpm', 
+            'graduasi_raw', 'graduasi_fix', 'generated_file_data', 
+            'rhk3_results', 'rhk2_queue', 'rhk2_results', 
+            'rhk4_queue', 'rhk4_results', 'rhk7_queue', 'rhk7_results',
+            'tgl_val', 'bln_val', 'th_val']
+    
+    for k in keys:
+        if k not in st.session_state:
+            st.session_state[k] = None
+            
+    # Default values specific
+    if st.session_state['page'] is None: st.session_state['page'] = 'home'
+    if st.session_state['rhk2_queue'] is None: st.session_state['rhk2_queue'] = []
+    if st.session_state['rhk4_queue'] is None: st.session_state['rhk4_queue'] = []
+    if st.session_state['rhk7_queue'] is None: st.session_state['rhk7_queue'] = []
+    
+    if not st.session_state['bln_val']: st.session_state['bln_val'] = "JANUARI"
+    if not st.session_state['th_val']: st.session_state['th_val'] = "2026"
+    if not st.session_state['tgl_val']: update_tanggal_surat()
+
 # ==========================================
 # 3. ENGINE AI & DOKUMEN GENERATOR
 # ==========================================
 def generate_isi_laporan(topik, detail, kpm_total, kpm_fokus, bulan, lokasi_lengkap, analisis="", app_info="", ket_info=""):
     try:
-        # Gunakan API Key yang sudah didefinisikan di atas
         genai.configure(api_key=GOOGLE_API_KEY_MANUAL)
         model = genai.GenerativeModel('gemini-1.5-flash')
         
@@ -352,7 +380,7 @@ def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
     return pdf.output(dest='S').encode('latin-1')
 
 # ==========================================
-# 4. FUNGSI LOGIN & APP UTAMA
+# 4. FUNGSI UTAMA APP (DENGAN PERBAIKAN)
 # ==========================================
 def check_password():
     if st.session_state.get("password_correct", False):
@@ -376,31 +404,17 @@ def check_password():
     return False
 
 def main_app():
-    # --- TOMBOL LOGOUT ---
+    # --- LOGOUT BUTTON ---
     with st.sidebar:
         st.write(f"👤 Login: **{st.session_state.get('username')}**")
         if st.button("🔒 Logout", type="secondary"):
             st.session_state["password_correct"] = False
             st.rerun()
 
-    # --- INIT DB & STATE (Agar tidak KeyError) ---
+    # --- SIDEBAR INPUTS ---
     init_db()
-    if 'page' not in st.session_state or st.session_state['page'] is None: 
-        st.session_state['page'] = 'home'
-    
-    keys = ['selected_rhk', 'kop_bytes', 'ttd_bytes', 'db_kpm', 'graduasi_raw', 'graduasi_fix', 
-            'generated_file_data', 'rhk3_results', 'rhk2_queue', 'rhk2_results', 
-            'rhk4_queue', 'rhk4_results', 'rhk7_queue', 'rhk7_results', 'tgl_val', 'bln_val', 'th_val'] 
-    for k in keys:
-        if k not in st.session_state: st.session_state[k] = None
-    
-    # Init Lists (Wajib)
-    if st.session_state['rhk2_queue'] is None: st.session_state['rhk2_queue'] = []
-    if st.session_state['rhk4_queue'] is None: st.session_state['rhk4_queue'] = []
-    if st.session_state['rhk7_queue'] is None: st.session_state['rhk7_queue'] = []
-
-    # --- SIDEBAR MENU ---
     u_nama, u_nip, u_kpm, u_prov, u_kab, u_kec, u_kel = get_user_settings()
+    
     st.sidebar.header("👤 Profil Pendamping")
     nama = st.sidebar.text_input("Nama Lengkap", u_nama, key="nama_val")
     nip = st.sidebar.text_input("NIP", u_nip, key="nip_val")
@@ -413,18 +427,14 @@ def main_app():
     kel = st.sidebar.text_input("Kelurahan", u_kel, key="kel_val")
     
     st.sidebar.markdown("### 📅 Periode")
-    if 'bln_val' not in st.session_state or not st.session_state['bln_val']: st.session_state['bln_val'] = "JANUARI"
-    if 'th_val' not in st.session_state or not st.session_state['th_val']: st.session_state['th_val'] = "2026"
-    
     c1, c2 = st.sidebar.columns([1, 1.5])
     with c1: st.selectbox("Tahun", ["2026", "2027"], key="th_val", on_change=update_tanggal_surat)
     with c2: st.selectbox("Bulan", ["JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI", "JULI", "AGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DESEMBER"], key="bln_val", on_change=update_tanggal_surat)
     
-    if 'tgl_val' not in st.session_state or not st.session_state['tgl_val']: update_tanggal_surat()
     st.sidebar.text_input("Tanggal Surat", key="tgl_val")
-    
     st.sidebar.markdown("---")
     st.sidebar.info(f"📂 Arsip Foto: {count_archived_photos()} File")
+    
     st.sidebar.header("🖼️ Atribut")
     k = st.sidebar.file_uploader("Kop Surat", type=['png','jpg']); t = st.sidebar.file_uploader("Tanda Tangan", type=['png','jpg'])
     if st.sidebar.button("💾 SIMPAN PROFIL"):
@@ -433,17 +443,22 @@ def main_app():
         if t: st.session_state['ttd_bytes'] = t.getvalue()
         st.sidebar.success("Tersimpan!")
 
-    # --- HOME DASHBOARD ---
+    # --- HOME PAGE ---
     if st.session_state['page'] == 'home':
         st.markdown("""<style>div.stButton>button{width:100%;height:140px;font-weight:bold;border-radius:15px;box-shadow:0 4px 6px rgba(0,0,0,0.1);transition:0.3s}div.stButton>button:hover{transform:translateY(-5px);box-shadow:0 8px 12px rgba(0,0,0,0.2);border-color:#ff4b4b}</style>""", unsafe_allow_html=True)
         st.title("📂 Aplikasi RHK PKH Pro")
-        st.markdown("### Menu Utama"); cols = st.columns(4); rhk_keys = list(CONFIG_LAPORAN.keys())
+        st.markdown("### Menu Utama")
+        
+        cols = st.columns(4); rhk_keys = list(CONFIG_LAPORAN.keys())
         for i, rhk in enumerate(rhk_keys):
             icon = "📄"; parts = rhk.split("–"); label = f"{icon}\n{parts[0].strip()}\n{parts[-1].strip()}"
             with cols[i % 4]:
                 if st.button(label, key=f"btn_{i}"):
-                    st.session_state['selected_rhk'] = rhk; st.session_state['page'] = 'detail'
-                    reset_states(); st.rerun()
+                    st.session_state['selected_rhk'] = rhk
+                    st.session_state['page'] = 'detail'
+                    reset_states() # Reset state saat pindah menu
+                    st.rerun()
+        
         st.markdown("---")
         st.markdown("<div style='text-align: center; color: grey; font-size: 12px;'>Copyright © 2026 VHS | All Rights Reserved | Kebijakan Privasi</div>", unsafe_allow_html=True)
 
@@ -453,17 +468,23 @@ def main_app():
         with st.container():
             st.caption("🚀 Navigasi Cepat:")
             nav_cols = st.columns(8)
-            if nav_cols[0].button("🏠 HOME"): st.session_state['page'] = 'home'; reset_states(); st.rerun()
+            if nav_cols[0].button("🏠 HOME"): 
+                st.session_state['page'] = 'home'
+                reset_states()
+                st.rerun()
+                
             rhk_keys = list(CONFIG_LAPORAN.keys()); col_idx = 1
             for rhk in rhk_keys:
                 if rhk != current_rhk and col_idx < 8:
                     if nav_cols[col_idx].button(rhk.split("–")[0].strip(), key=f"nav_{rhk}"):
-                        st.session_state['selected_rhk'] = rhk; reset_states(); st.rerun()
+                        st.session_state['selected_rhk'] = rhk
+                        reset_states()
+                        st.rerun()
                     col_idx += 1
         
         st.divider(); st.subheader(f"{current_rhk}")
         
-        # --- JUDUL KOP OTOMATIS ---
+        # JUDUL OTOMATIS
         def_judul = "KEGIATAN"
         if "RHK 1" in current_rhk: def_judul = "KEGIATAN PENYALURAN BANTUAN SOSIAL"
         elif "RHK 2" in current_rhk: def_judul = "PELAKSANAAN P2K2 (FDS)"
@@ -629,6 +650,10 @@ def main_app():
                 c1.download_button("📄 Download WORD", files['word'], f"{files['name']}.docx", "application/docx")
                 c2.download_button("📕 Download PDF", files['pdf'], f"{files['name']}.pdf", "application/pdf")
 
-# --- MAIN EXECUTION ---
-if check_password():
-    main_app()
+# ==========================================
+# 5. EKSEKUSI PROGRAM (MAIN)
+# ==========================================
+if __name__ == "__main__":
+    init_session_state() # PENTING: Panggil ini dulu sebelum yang lain
+    if check_password():
+        main_app()
