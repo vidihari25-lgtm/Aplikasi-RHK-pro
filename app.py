@@ -19,14 +19,15 @@ import tempfile
 # ==========================================
 st.set_page_config(page_title="Aplikasi RHK PKH Pro", layout="wide")
 
-# --- USERNAME & PASSWORD (EDIT DISINI) ---
+# --- USERNAME & PASSWORD ---
 DAFTAR_USER = {
     "admin": "admin123",
     "pendamping": "pkh2026",
     "user": "user"
 }
 
-# --- API KEY (WAJIB DIISI) ---
+# --- API KEY (WAJIB DIISI DENGAN BENAR) ---
+# Dapatkan di: https://aistudio.google.com/app/apikey
 GOOGLE_API_KEY_MANUAL = "MASUKKAN_KEY_GOOGLE_ANDA_DISINI"
 
 # --- CONFIG DATA LAPORAN ---
@@ -54,7 +55,7 @@ CONFIG_LAPORAN = {
 # 2. FUNGSI DATABASE & TOOLS (GLOBAL)
 # ==========================================
 def init_db():
-    conn = sqlite3.connect('riwayat_v42.db')
+    conn = sqlite3.connect('riwayat_v43.db')
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS riwayat (id INTEGER PRIMARY KEY, tgl TEXT, rhk TEXT, judul TEXT, lokasi TEXT)''')
     c.execute('''CREATE TABLE IF NOT EXISTS user_settings (
@@ -67,7 +68,7 @@ def init_db():
     conn.commit(); conn.close()
 
 def get_user_settings():
-    conn = sqlite3.connect('riwayat_v42.db')
+    conn = sqlite3.connect('riwayat_v43.db')
     c = conn.cursor()
     c.execute('SELECT nama, nip, kpm, prov, kab, kec, kel FROM user_settings WHERE id=1')
     data = c.fetchone()
@@ -75,14 +76,14 @@ def get_user_settings():
     return data
 
 def save_user_settings(nama, nip, kpm, prov, kab, kec, kel):
-    conn = sqlite3.connect('riwayat_v42.db')
+    conn = sqlite3.connect('riwayat_v43.db')
     c = conn.cursor()
     c.execute('''UPDATE user_settings SET nama=?, nip=?, kpm=?, prov=?, kab=?, kec=?, kel=? WHERE id=1''', (nama, nip, kpm, prov, kab, kec, kel))
     conn.commit(); conn.close()
 
 def simpan_riwayat(rhk, judul, lokasi):
     try:
-        conn = sqlite3.connect('riwayat_v42.db')
+        conn = sqlite3.connect('riwayat_v43.db')
         c = conn.cursor()
         tgl = datetime.now().strftime("%Y-%m-%d %H:%M")
         c.execute('INSERT INTO riwayat (tgl, rhk, judul, lokasi) VALUES (?, ?, ?, ?)', (tgl, rhk, judul, lokasi))
@@ -190,7 +191,6 @@ def init_session_state():
         if k not in st.session_state:
             st.session_state[k] = None
             
-    # Default values specific
     if st.session_state['page'] is None: st.session_state['page'] = 'home'
     if st.session_state['rhk2_queue'] is None: st.session_state['rhk2_queue'] = []
     if st.session_state['rhk4_queue'] is None: st.session_state['rhk4_queue'] = []
@@ -204,6 +204,11 @@ def init_session_state():
 # 3. ENGINE AI & DOKUMEN GENERATOR
 # ==========================================
 def generate_isi_laporan(topik, detail, kpm_total, kpm_fokus, bulan, lokasi_lengkap, analisis="", app_info="", ket_info=""):
+    # CEK API KEY DULU
+    if not GOOGLE_API_KEY_MANUAL or "MASUKKAN" in GOOGLE_API_KEY_MANUAL:
+        st.error("⚠️ API Key Google belum dimasukkan! Proses dibatalkan.")
+        return None
+
     try:
         genai.configure(api_key=GOOGLE_API_KEY_MANUAL)
         model = genai.GenerativeModel('gemini-1.5-flash')
@@ -231,153 +236,162 @@ def generate_isi_laporan(topik, detail, kpm_total, kpm_fokus, bulan, lokasi_leng
         import json
         return json.loads(response.text.replace("```json", "").replace("```", "").strip())
     except Exception as e:
+        st.error(f"❌ Terjadi kesalahan saat menghubungi AI: {str(e)}")
         return None
 
 def create_word_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
-    doc = Document()
-    for s in doc.sections: s.top_margin=Cm(2); s.bottom_margin=Cm(2); s.left_margin=Cm(2.5); s.right_margin=Cm(2.5)
-    style = doc.styles['Normal']; style.font.name = 'Times New Roman'; style.font.size = Pt(12)
-    
-    if kop: 
+    try:
+        doc = Document()
+        for s in doc.sections: s.top_margin=Cm(2); s.bottom_margin=Cm(2); s.left_margin=Cm(2.5); s.right_margin=Cm(2.5)
+        style = doc.styles['Normal']; style.font.name = 'Times New Roman'; style.font.size = Pt(12)
+        
+        if kop: 
+            p = doc.add_paragraph(); p.alignment = 1
+            p.add_run().add_picture(io.BytesIO(kop), width=Inches(6.2))
+        
+        doc.add_paragraph(" ")
         p = doc.add_paragraph(); p.alignment = 1
-        p.add_run().add_picture(io.BytesIO(kop), width=Inches(6.2))
-    
-    doc.add_paragraph(" ")
-    p = doc.add_paragraph(); p.alignment = 1
-    run = p.add_run(f"LAPORAN\nTENTANG\n{meta['judul'].upper()}\n{meta['bulan'].upper()}")
-    run.bold = True; run.font.size = Pt(14)
-    doc.add_paragraph(" ")
+        run = p.add_run(f"LAPORAN\nTENTANG\n{meta['judul'].upper()}\n{meta['bulan'].upper()}")
+        run.bold = True; run.font.size = Pt(14)
+        doc.add_paragraph(" ")
 
-    def add_p_indent(text, bold=False):
-        safe_text = safe_str(text); paragraphs = safe_text.split('\n')
-        for p_text in paragraphs:
-            if p_text.strip():
-                p = doc.add_paragraph(); p.paragraph_format.first_line_indent = Cm(1.27)
-                p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-                run = p.add_run(p_text.strip())
-                if bold: run.bold = True
+        def add_p_indent(text, bold=False):
+            safe_text = safe_str(text); paragraphs = safe_text.split('\n')
+            for p_text in paragraphs:
+                if p_text.strip():
+                    p = doc.add_paragraph(); p.paragraph_format.first_line_indent = Cm(1.27)
+                    p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+                    run = p.add_run(p_text.strip())
+                    if bold: run.bold = True
 
-    def add_numbered_item(number, text):
-        p = doc.add_paragraph(); p.paragraph_format.left_indent = Cm(0.75)
-        p.paragraph_format.first_line_indent = Cm(-0.75)
-        p.add_run(f"{number}.\t{safe_str(text)}") 
+        def add_numbered_item(number, text):
+            p = doc.add_paragraph(); p.paragraph_format.left_indent = Cm(0.75)
+            p.paragraph_format.first_line_indent = Cm(-0.75)
+            p.add_run(f"{number}.\t{safe_str(text)}") 
 
-    doc.add_paragraph("A. Pendahuluan", style='Heading 1')
-    doc.add_paragraph("1. Gambaran Umum", style='Heading 2')
-    add_p_indent(f"Lokasi Pelaksanaan: Kelurahan {meta['kel']}, Kecamatan {meta['kec']}, {meta['kab']}, {meta['prov']}.")
-    add_p_indent(data.get('gambaran_umum'))
-    
-    doc.add_paragraph("2. Maksud dan Tujuan", style='Heading 2')
-    add_p_indent(data.get('maksud_tujuan'))
-    
-    doc.add_paragraph("3. Ruang Lingkup", style='Heading 2')
-    add_p_indent(data.get('ruang_lingkup'))
-    
-    doc.add_paragraph("4. Dasar", style='Heading 2')
-    for i, item in enumerate(data.get('dasar_hukum', []), 1): add_numbered_item(i, item)
+        doc.add_paragraph("A. Pendahuluan", style='Heading 1')
+        doc.add_paragraph("1. Gambaran Umum", style='Heading 2')
+        add_p_indent(f"Lokasi Pelaksanaan: Kelurahan {meta['kel']}, Kecamatan {meta['kec']}, {meta['kab']}, {meta['prov']}.")
+        add_p_indent(data.get('gambaran_umum'))
+        
+        doc.add_paragraph("2. Maksud dan Tujuan", style='Heading 2')
+        add_p_indent(data.get('maksud_tujuan'))
+        
+        doc.add_paragraph("3. Ruang Lingkup", style='Heading 2')
+        add_p_indent(data.get('ruang_lingkup'))
+        
+        doc.add_paragraph("4. Dasar", style='Heading 2')
+        for i, item in enumerate(data.get('dasar_hukum', []), 1): add_numbered_item(i, item)
 
-    doc.add_paragraph("B. Kegiatan yang dilaksanakan", style='Heading 1')
-    if extra_info and extra_info.get('desc'):
-        p = doc.add_paragraph(f"Fokus: {extra_info['desc']}"); p.runs[0].italic = True
-    for item in data.get('kegiatan', []):
-        add_p_indent(safe_str(item).replace('\n', ' '))
+        doc.add_paragraph("B. Kegiatan yang dilaksanakan", style='Heading 1')
+        if extra_info and extra_info.get('desc'):
+            p = doc.add_paragraph(f"Fokus: {extra_info['desc']}"); p.runs[0].italic = True
+        for item in data.get('kegiatan', []):
+            add_p_indent(safe_str(item).replace('\n', ' '))
 
-    doc.add_paragraph("C. Hasil yang dicapai", style='Heading 1')
-    if kpm_data and isinstance(kpm_data, dict):
-        doc.add_paragraph(f"Profil KPM: {kpm_data.get('Nama')} (NIK: {kpm_data.get('NIK')})")
-    for i, item in enumerate(data.get('hasil', []), 1): add_numbered_item(i, item)
+        doc.add_paragraph("C. Hasil yang dicapai", style='Heading 1')
+        if kpm_data and isinstance(kpm_data, dict):
+            doc.add_paragraph(f"Profil KPM: {kpm_data.get('Nama')} (NIK: {kpm_data.get('NIK')})")
+        for i, item in enumerate(data.get('hasil', []), 1): add_numbered_item(i, item)
 
-    doc.add_paragraph("D. Kesimpulan dan Saran", style='Heading 1')
-    add_p_indent(data.get('kesimpulan'))
-    doc.add_paragraph("Adapun saran kami:")
-    for item in data.get('saran', []): p = doc.add_paragraph(f"- {safe_str(item)}"); p.paragraph_format.left_indent = Cm(1.0)
+        doc.add_paragraph("D. Kesimpulan dan Saran", style='Heading 1')
+        add_p_indent(data.get('kesimpulan'))
+        doc.add_paragraph("Adapun saran kami:")
+        for item in data.get('saran', []): p = doc.add_paragraph(f"- {safe_str(item)}"); p.paragraph_format.left_indent = Cm(1.0)
 
-    doc.add_paragraph("E. Penutup", style='Heading 1')
-    add_p_indent(data.get('penutup'))
-    doc.add_paragraph(" "); doc.add_paragraph(" ")
+        doc.add_paragraph("E. Penutup", style='Heading 1')
+        add_p_indent(data.get('penutup'))
+        doc.add_paragraph(" "); doc.add_paragraph(" ")
 
-    table = doc.add_table(rows=1, cols=2); table.autofit = False
-    table.columns[0].width = Inches(3.5); table.columns[1].width = Inches(3.0)
-    cell_kanan = table.cell(0, 1); p_ttd = cell_kanan.paragraphs[0]; p_ttd.alignment = 1
-    p_ttd.add_run(f"Dibuat di {meta['kab']}\nPada Tanggal {meta['tgl']}\nPendamping PKH\n")
-    if ttd: p_ttd.add_run().add_picture(io.BytesIO(ttd), height=Inches(0.8)); p_ttd.add_run("\n")
-    else: p_ttd.add_run("\n\n\n")
-    p_ttd.add_run(f"\n{meta['nama']}\n").bold = True; p_ttd.add_run(f"NIP. {meta['nip']}")
+        table = doc.add_table(rows=1, cols=2); table.autofit = False
+        table.columns[0].width = Inches(3.5); table.columns[1].width = Inches(3.0)
+        cell_kanan = table.cell(0, 1); p_ttd = cell_kanan.paragraphs[0]; p_ttd.alignment = 1
+        p_ttd.add_run(f"Dibuat di {meta['kab']}\nPada Tanggal {meta['tgl']}\nPendamping PKH\n")
+        if ttd: p_ttd.add_run().add_picture(io.BytesIO(ttd), height=Inches(0.8)); p_ttd.add_run("\n")
+        else: p_ttd.add_run("\n\n\n")
+        p_ttd.add_run(f"\n{meta['nama']}\n").bold = True; p_ttd.add_run(f"NIP. {meta['nip']}")
 
-    doc.add_page_break()
-    p_lamp = doc.add_paragraph("LAMPIRAN DOKUMENTASI"); p_lamp.alignment = 1; p_lamp.runs[0].bold = True
-    if imgs:
-        tbl_img = doc.add_table(rows=(len(imgs)+1)//2, cols=2); tbl_img.autofit = True
-        for i, img_data in enumerate(imgs):
-            try:
-                cell = tbl_img.cell(i//2, i%2); p_img = cell.paragraphs[0]; p_img.alignment = 1
-                img_data.seek(0); img_comp = compress_image(img_data)
-                p_img.add_run().add_picture(img_comp, width=Inches(2.8))
-                p_img.add_run(f"\n{meta['judul']} - Foto {i+1}")
-            except: pass
-    bio = io.BytesIO(); doc.save(bio); return bio
+        doc.add_page_break()
+        p_lamp = doc.add_paragraph("LAMPIRAN DOKUMENTASI"); p_lamp.alignment = 1; p_lamp.runs[0].bold = True
+        if imgs:
+            tbl_img = doc.add_table(rows=(len(imgs)+1)//2, cols=2); tbl_img.autofit = True
+            for i, img_data in enumerate(imgs):
+                try:
+                    cell = tbl_img.cell(i//2, i%2); p_img = cell.paragraphs[0]; p_img.alignment = 1
+                    img_data.seek(0); img_comp = compress_image(img_data)
+                    p_img.add_run().add_picture(img_comp, width=Inches(2.8))
+                    p_img.add_run(f"\n{meta['judul']} - Foto {i+1}")
+                except: pass
+        bio = io.BytesIO(); doc.save(bio); return bio
+    except Exception as e:
+        st.error(f"Gagal membuat Word: {e}")
+        return None
 
 def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
-    pdf = FPDF(); pdf.set_margins(25, 20, 25); pdf.add_page(); pdf.set_font("Times", size=12)
-    def J_indent(txt): pdf.multi_cell(0, 6, "       " + clean_text_for_pdf(txt), align='J')
-    def TXT(s): return clean_text_for_pdf(s)
+    try:
+        pdf = FPDF(); pdf.set_margins(25, 20, 25); pdf.add_page(); pdf.set_font("Times", size=12)
+        def J_indent(txt): pdf.multi_cell(0, 6, "       " + clean_text_for_pdf(txt), align='J')
+        def TXT(s): return clean_text_for_pdf(s)
 
-    if kop:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp: tmp.write(kop); pth=tmp.name
-        pdf.image(pth, x=10, y=10, w=190); os.unlink(pth); pdf.ln(35)
-    else: pdf.ln(10)
+        if kop:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp: tmp.write(kop); pth=tmp.name
+            pdf.image(pth, x=10, y=10, w=190); os.unlink(pth); pdf.ln(35)
+        else: pdf.ln(10)
 
-    pdf.set_font("Times", "B", 14)
-    pdf.cell(0, 6, "LAPORAN", ln=True, align='C')
-    pdf.cell(0, 6, "TENTANG", ln=True, align='C')
-    pdf.cell(0, 6, TXT(meta['judul'].upper()), ln=True, align='C')
-    pdf.cell(0, 6, TXT(meta['bulan'].upper()), ln=True, align='C'); pdf.ln(10)
+        pdf.set_font("Times", "B", 14)
+        pdf.cell(0, 6, "LAPORAN", ln=True, align='C')
+        pdf.cell(0, 6, "TENTANG", ln=True, align='C')
+        pdf.cell(0, 6, TXT(meta['judul'].upper()), ln=True, align='C')
+        pdf.cell(0, 6, TXT(meta['bulan'].upper()), ln=True, align='C'); pdf.ln(10)
 
-    pdf.set_font("Times", "B", 12); pdf.cell(0, 8, "A. Pendahuluan", ln=True)
-    pdf.set_font("Times", "B", 12); pdf.cell(0, 6, "1. Gambaran Umum", ln=True); pdf.set_font("Times", "", 12)
-    J_indent(f"Lokasi Pelaksanaan: Kelurahan {meta['kel']}, Kecamatan {meta['kec']}, {meta['kab']}, {meta['prov']}.")
-    J_indent(safe_str(data.get('gambaran_umum')))
-    
-    pdf.set_font("Times", "B", 12); pdf.cell(0, 6, "2. Maksud dan Tujuan", ln=True); pdf.set_font("Times", "", 12)
-    J_indent(safe_str(data.get('maksud_tujuan')))
-    
-    pdf.set_font("Times", "B", 12); pdf.cell(0, 6, "3. Ruang Lingkup", ln=True); pdf.set_font("Times", "", 12)
-    J_indent(safe_str(data.get('ruang_lingkup')))
-    
-    pdf.set_font("Times", "B", 12); pdf.cell(0, 6, "4. Dasar", ln=True); pdf.set_font("Times", "", 12)
-    for i, item in enumerate(data.get('dasar_hukum', []), 1):
-        pdf.cell(10, 6, f"{i}.", 0, 0); pdf.multi_cell(0, 6, TXT(item))
+        pdf.set_font("Times", "B", 12); pdf.cell(0, 8, "A. Pendahuluan", ln=True)
+        pdf.set_font("Times", "B", 12); pdf.cell(0, 6, "1. Gambaran Umum", ln=True); pdf.set_font("Times", "", 12)
+        J_indent(f"Lokasi Pelaksanaan: Kelurahan {meta['kel']}, Kecamatan {meta['kec']}, {meta['kab']}, {meta['prov']}.")
+        J_indent(safe_str(data.get('gambaran_umum')))
+        
+        pdf.set_font("Times", "B", 12); pdf.cell(0, 6, "2. Maksud dan Tujuan", ln=True); pdf.set_font("Times", "", 12)
+        J_indent(safe_str(data.get('maksud_tujuan')))
+        
+        pdf.set_font("Times", "B", 12); pdf.cell(0, 6, "3. Ruang Lingkup", ln=True); pdf.set_font("Times", "", 12)
+        J_indent(safe_str(data.get('ruang_lingkup')))
+        
+        pdf.set_font("Times", "B", 12); pdf.cell(0, 6, "4. Dasar", ln=True); pdf.set_font("Times", "", 12)
+        for i, item in enumerate(data.get('dasar_hukum', []), 1):
+            pdf.cell(10, 6, f"{i}.", 0, 0); pdf.multi_cell(0, 6, TXT(item))
 
-    pdf.ln(4); pdf.set_font("Times", "B", 12); pdf.cell(0, 8, "B. Kegiatan yang dilaksanakan", ln=True); pdf.set_font("Times", "", 12)
-    if extra_info and extra_info.get('desc'): pdf.multi_cell(0, 6, TXT(f"Fokus: {extra_info['desc']}"))
-    for item in data.get('kegiatan', []): J_indent(safe_str(item).replace('\n', ' ')); pdf.ln(2)
+        pdf.ln(4); pdf.set_font("Times", "B", 12); pdf.cell(0, 8, "B. Kegiatan yang dilaksanakan", ln=True); pdf.set_font("Times", "", 12)
+        if extra_info and extra_info.get('desc'): pdf.multi_cell(0, 6, TXT(f"Fokus: {extra_info['desc']}"))
+        for item in data.get('kegiatan', []): J_indent(safe_str(item).replace('\n', ' ')); pdf.ln(2)
 
-    pdf.ln(2); pdf.set_font("Times", "B", 12); pdf.cell(0, 8, "C. Hasil yang dicapai", ln=True); pdf.set_font("Times", "", 12)
-    if kpm_data: pdf.cell(0, 6, TXT(f"KPM: {kpm_data.get('Nama')}"), ln=True)
-    for i, item in enumerate(data.get('hasil', []), 1):
-        pdf.cell(10, 6, f"{i}.", 0, 0); pdf.multi_cell(0, 6, TXT(item))
+        pdf.ln(2); pdf.set_font("Times", "B", 12); pdf.cell(0, 8, "C. Hasil yang dicapai", ln=True); pdf.set_font("Times", "", 12)
+        if kpm_data: pdf.cell(0, 6, TXT(f"KPM: {kpm_data.get('Nama')}"), ln=True)
+        for i, item in enumerate(data.get('hasil', []), 1):
+            pdf.cell(10, 6, f"{i}.", 0, 0); pdf.multi_cell(0, 6, TXT(item))
 
-    pdf.ln(4); pdf.set_font("Times", "B", 12); pdf.cell(0, 8, "D. Kesimpulan dan Saran", ln=True); pdf.set_font("Times", "", 12)
-    J_indent(safe_str(data.get('kesimpulan')))
-    pdf.cell(0, 6, "Adapun saran kami:", ln=True)
-    for item in data.get('saran', []): pdf.cell(10, 6, "-", 0, 0); pdf.multi_cell(0, 6, TXT(item))
+        pdf.ln(4); pdf.set_font("Times", "B", 12); pdf.cell(0, 8, "D. Kesimpulan dan Saran", ln=True); pdf.set_font("Times", "", 12)
+        J_indent(safe_str(data.get('kesimpulan')))
+        pdf.cell(0, 6, "Adapun saran kami:", ln=True)
+        for item in data.get('saran', []): pdf.cell(10, 6, "-", 0, 0); pdf.multi_cell(0, 6, TXT(item))
 
-    pdf.ln(4); pdf.set_font("Times", "B", 12); pdf.cell(0, 8, "E. Penutup", ln=True); pdf.set_font("Times", "", 12)
-    J_indent(safe_str(data.get('penutup')))
+        pdf.ln(4); pdf.set_font("Times", "B", 12); pdf.cell(0, 8, "E. Penutup", ln=True); pdf.set_font("Times", "", 12)
+        J_indent(safe_str(data.get('penutup')))
 
-    pdf.ln(10); start_x = 110; pdf.set_x(start_x)
-    pdf.cell(80, 5, TXT(f"Dibuat di {meta['kab']}"), ln=True, align='C')
-    pdf.set_x(start_x); pdf.cell(80, 5, TXT(f"Pada Tanggal {meta['tgl']}"), ln=True, align='C')
-    pdf.set_x(start_x); pdf.cell(80, 5, "Pendamping PKH", ln=True, align='C')
-    
-    if ttd:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp: tmp.write(ttd); pth=tmp.name
-        pdf.image(pth, x=start_x+25, y=pdf.get_y(), h=25); os.unlink(pth); pdf.ln(25)
-    else: pdf.ln(25)
-    
-    pdf.set_x(start_x); pdf.set_font("Times", "B", 12); pdf.cell(80, 5, TXT(meta['nama']), ln=True, align='C')
-    pdf.set_x(start_x); pdf.set_font("Times", "", 12); pdf.cell(80, 5, TXT(f"NIP. {meta['nip']}"), ln=True, align='C')
-    return pdf.output(dest='S').encode('latin-1')
+        pdf.ln(10); start_x = 110; pdf.set_x(start_x)
+        pdf.cell(80, 5, TXT(f"Dibuat di {meta['kab']}"), ln=True, align='C')
+        pdf.set_x(start_x); pdf.cell(80, 5, TXT(f"Pada Tanggal {meta['tgl']}"), ln=True, align='C')
+        pdf.set_x(start_x); pdf.cell(80, 5, "Pendamping PKH", ln=True, align='C')
+        
+        if ttd:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp: tmp.write(ttd); pth=tmp.name
+            pdf.image(pth, x=start_x+25, y=pdf.get_y(), h=25); os.unlink(pth); pdf.ln(25)
+        else: pdf.ln(25)
+        
+        pdf.set_x(start_x); pdf.set_font("Times", "B", 12); pdf.cell(80, 5, TXT(meta['nama']), ln=True, align='C')
+        pdf.set_x(start_x); pdf.set_font("Times", "", 12); pdf.cell(80, 5, TXT(f"NIP. {meta['nip']}"), ln=True, align='C')
+        return pdf.output(dest='S').encode('latin-1')
+    except Exception as e:
+        st.error(f"Gagal membuat PDF: {e}")
+        return None
 
 # ==========================================
 # 4. FUNGSI UTAMA APP (DENGAN PERBAIKAN)
@@ -411,8 +425,10 @@ def main_app():
             st.session_state["password_correct"] = False
             st.rerun()
 
-    # --- SIDEBAR INPUTS ---
+    # --- INIT DB & STATE ---
     init_db()
+    
+    # --- SIDEBAR INPUTS ---
     u_nama, u_nip, u_kpm, u_prov, u_kab, u_kec, u_kel = get_user_settings()
     
     st.sidebar.header("👤 Profil Pendamping")
@@ -456,7 +472,7 @@ def main_app():
                 if st.button(label, key=f"btn_{i}"):
                     st.session_state['selected_rhk'] = rhk
                     st.session_state['page'] = 'detail'
-                    reset_states() # Reset state saat pindah menu
+                    reset_states() 
                     st.rerun()
         
         st.markdown("---")
@@ -651,9 +667,9 @@ def main_app():
                 c2.download_button("📕 Download PDF", files['pdf'], f"{files['name']}.pdf", "application/pdf")
 
 # ==========================================
-# 5. EKSEKUSI PROGRAM (MAIN)
+# 5. MAIN EXECUTION
 # ==========================================
 if __name__ == "__main__":
-    init_session_state() # PENTING: Panggil ini dulu sebelum yang lain
+    init_session_state()
     if check_password():
         main_app()
