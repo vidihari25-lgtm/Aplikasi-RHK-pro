@@ -565,7 +565,34 @@ if check_password():
             if t: st.session_state['ttd_bytes'] = t.getvalue()
             st.sidebar.success("Profil Tersimpan!")
     def show_dashboard():
-        st.markdown("""<style>div.stButton>button{width:100%;height:160px;font-size:15px;font-weight:bold;border-radius:15px;box-shadow:0 4px 6px rgba(0,0,0,0.1);}</style>""", unsafe_allow_html=True)
+        # --- CSS DIMODIFIKASI: WARNA TOMBOL ---
+        st.markdown("""
+        <style>
+        div.stButton > button {
+            width: 100%;
+            height: 160px;
+            font-size: 15px;
+            font-weight: bold;
+            border-radius: 15px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            
+            /* GANTI WARNA DI SINI (Tema Biru Muda ke Putih) */
+            background: linear-gradient(135deg, #ffffff 0%, #e3f2fd 100%); 
+            color: #0277bd; /* Warna Teks Biru */
+            border: 1px solid #b3e5fc; /* Warna Garis Pinggir */
+            transition: all 0.3s ease;
+        }
+        
+        /* EFEK SAAT MOUSE DIARAHKAN (HOVER) */
+        div.stButton > button:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 15px rgba(2, 119, 189, 0.2);
+            border-color: #0277bd;
+            color: #01579b;
+        }
+        </style>
+        """, unsafe_allow_html=True)
+
         st.title("📂 Aplikasi RHK PKH Pro"); st.markdown("### Menu Utama")
         rhk_keys = list(CONFIG_LAPORAN.keys()); cols = st.columns(4)
         for i, rhk in enumerate(rhk_keys):
@@ -788,4 +815,5 @@ if check_password():
     render_sidebar()
     if st.session_state['page'] == 'home': show_dashboard()
     elif st.session_state['page'] == 'detail': show_detail_page()
+
 
