@@ -526,38 +526,44 @@ if check_password():
 
     def render_sidebar():
         u_nama, u_nip, u_kpm, u_prov, u_kab, u_kec, u_kel = get_user_settings()
-        st.sidebar.header("👤 Profil Pendamping")
-        nama = st.sidebar.text_input("Nama Lengkap", u_nama, key="nama_val")
-        nip = st.sidebar.text_input("NIP", u_nip, key="nip_val")
-        kpm = st.sidebar.number_input("Total KPM Dampingan", min_value=0, value=u_kpm, key="kpm_global_val")
+
+        # 1. Profil (Dibuat terbuka/expanded=True agar langsung terlihat)
+        with st.sidebar.expander("👤 Profil Pendamping", expanded=True):
+            nama = st.text_input("Nama Lengkap", u_nama, key="nama_val")
+            nip = st.text_input("NIP", u_nip, key="nip_val")
+            kpm = st.number_input("Total KPM Dampingan", min_value=0, value=u_kpm, key="kpm_global_val")
         
-        st.sidebar.markdown("### 🌍 Wilayah")
-        prov = st.sidebar.text_input("Provinsi", u_prov, key="prov_val")
-        kab = st.sidebar.text_input("Kabupaten", u_kab, key="kab_val")
-        kec = st.sidebar.text_input("Kecamatan", u_kec, key="kec_val")
-        kel = st.sidebar.text_input("Kelurahan", u_kel, key="kel_val")
+        # 2. Wilayah (Dilipat/expanded=False)
+        with st.sidebar.expander("🌍 Wilayah", expanded=False):
+            prov = st.text_input("Provinsi", u_prov, key="prov_val")
+            kab = st.text_input("Kabupaten", u_kab, key="kab_val")
+            kec = st.text_input("Kecamatan", u_kec, key="kec_val")
+            kel = st.text_input("Kelurahan", u_kel, key="kel_val")
         
-        st.sidebar.markdown("### 📅 Periode")
-        c1, c2 = st.sidebar.columns([1, 1.5])
-        with c1:
-            st.selectbox("Tahun", ["2026", "2027"], key="th_val", on_change=update_tanggal_surat)
-        with c2:
-            BULAN = ["JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI", "JULI", "AGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DESEMBER"]
-            st.selectbox("Bulan", BULAN, key="bln_val", on_change=update_tanggal_surat)
+        # 3. Periode (Dilipat)
+        with st.sidebar.expander("📅 Periode", expanded=False):
+            c1, c2 = st.columns([1, 1.5])
+            with c1:
+                st.selectbox("Tahun", ["2026", "2027"], key="th_val", on_change=update_tanggal_surat)
+            with c2:
+                BULAN = ["JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI", "JULI", "AGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DESEMBER"]
+                st.selectbox("Bulan", BULAN, key="bln_val", on_change=update_tanggal_surat)
+            
+            st.text_input("Tanggal Surat", key="tgl_val")
         
-        st.sidebar.text_input("Tanggal Surat", key="tgl_val")
         st.sidebar.markdown("---")
         st.sidebar.info(f"📂 **Arsip Foto:** {count_archived_photos()} File")
         
-        st.sidebar.header("🖼️ Atribut")
-        k = st.sidebar.file_uploader("Kop Surat", type=['png','jpg'])
-        t = st.sidebar.file_uploader("Tanda Tangan", type=['png','jpg'])
+        # 4. Atribut (Dilipat)
+        with st.sidebar.expander("🖼️ Atribut", expanded=False):
+            k = st.file_uploader("Kop Surat", type=['png','jpg'])
+            t = st.file_uploader("Tanda Tangan", type=['png','jpg'])
+
         if st.sidebar.button("💾 SIMPAN PROFIL"):
             save_user_settings(nama, nip, kpm, prov, kab, kec, kel)
             if k: st.session_state['kop_bytes'] = k.getvalue()
             if t: st.session_state['ttd_bytes'] = t.getvalue()
             st.sidebar.success("Profil Tersimpan!")
-
     def show_dashboard():
         st.markdown("""<style>div.stButton>button{width:100%;height:160px;font-size:15px;font-weight:bold;border-radius:15px;box-shadow:0 4px 6px rgba(0,0,0,0.1);}</style>""", unsafe_allow_html=True)
         st.title("📂 Aplikasi RHK PKH Pro"); st.markdown("### Menu Utama")
@@ -782,3 +788,4 @@ if check_password():
     render_sidebar()
     if st.session_state['page'] == 'home': show_dashboard()
     elif st.session_state['page'] == 'detail': show_detail_page()
+
