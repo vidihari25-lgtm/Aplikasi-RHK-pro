@@ -17,54 +17,11 @@ import json
 import re
 
 # ==========================================
-# 1. KONFIGURASI & STYLING
+# 1. KONFIGURASI HALAMAN
 # ==========================================
-st.set_page_config(page_title="Aplikasi RHK PKH Pro", layout="wide", page_icon="🇮🇩")
+st.set_page_config(page_title="Aplikasi RHK PKH Pro", layout="wide")
 
-def local_css():
-    st.markdown("""
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;700&display=swap');
-        html, body, [class*="css"] { font-family: 'Roboto', sans-serif; }
-        
-        /* Card Style untuk Menu Dashboard */
-        div.stButton > button {
-            width: 100%;
-            min-height: 100px;
-            white-space: pre-wrap;
-            background: linear-gradient(to bottom right, #ffffff, #f8f9fa);
-            color: #333;
-            border: 1px solid #ddd;
-            border-radius: 10px;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.05);
-            font-weight: 600;
-            transition: all 0.2s;
-        }
-        div.stButton > button:hover {
-            transform: translateY(-3px);
-            border-color: #ff4b4b;
-            color: #ff4b4b;
-            box-shadow: 0 5px 10px rgba(0,0,0,0.1);
-        }
-        
-        /* Login Box */
-        .login-container {
-            background-color: white;
-            padding: 30px;
-            border-radius: 15px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
-            text-align: center;
-            border-top: 5px solid #ff4b4b;
-            margin-bottom: 20px;
-        }
-        
-        section[data-testid="stSidebar"] { background-color: #f7f9fc; border-right: 1px solid #e6e6e6; }
-    </style>
-    """, unsafe_allow_html=True)
-
-local_css()
-
-# --- INISIALISASI STATE (Mencegah Error KeyError) ---
+# --- INISIALISASI STATE (Mencegah KeyError) ---
 if 'init_done' not in st.session_state:
     st.session_state['init_done'] = True
     st.session_state['page'] = 'home'
@@ -88,20 +45,24 @@ if 'init_done' not in st.session_state:
     st.session_state['username'] = ""
 
 # ==========================================
-# 2. LOGIKA API KEY & USER
+# 2. LOGIKA API KEY & DATABASE
 # ==========================================
 def get_api_key():
     try:
-        if "GOOGLE_API_KEY" in st.secrets: return st.secrets["GOOGLE_API_KEY"]
+        if "GOOGLE_API_KEY" in st.secrets:
+            return st.secrets["GOOGLE_API_KEY"]
     except: pass
-    if os.getenv("GOOGLE_API_KEY"): return os.getenv("GOOGLE_API_KEY")
+    if os.getenv("GOOGLE_API_KEY"):
+        return os.getenv("GOOGLE_API_KEY")
     return "MASUKKAN_KEY_JIKA_DI_LOCAL"
 
 FINAL_API_KEY = get_api_key()
 
-# Cek User
-if "users" in st.secrets: DAFTAR_USER = st.secrets["users"]
-else: DAFTAR_USER = {"admin": "admin123", "pendamping": "pkh2026", "user": "user"}
+# USER LOGIN
+try:
+    if "users" in st.secrets: DAFTAR_USER = st.secrets["users"]
+    else: DAFTAR_USER = {"admin": "admin123", "pendamping": "pkh2026", "user": "user"}
+except: DAFTAR_USER = {"admin": "admin123", "pendamping": "pkh2026", "user": "user"}
 
 CONFIG_LAPORAN = {
     "RHK 1 – LAPORAN PENYALURAN": ["Laporan Penyaluran Bantuan Sosial"],
@@ -113,9 +74,6 @@ CONFIG_LAPORAN = {
     "RHK 7 – LAPORAN DIREKTIF": ["Tugas Direktif Pimpinan"]
 }
 
-# ==========================================
-# 3. FUNGSI DATABASE & TOOLS (GLOBAL)
-# ==========================================
 def init_db():
     conn = sqlite3.connect('riwayat_v53.db')
     c = conn.cursor()
@@ -138,6 +96,17 @@ def save_user_settings(nama, nip, kpm, prov, kab, kec, kel):
     c.execute('''UPDATE user_settings SET nama=?, nip=?, kpm=?, prov=?, kab=?, kec=?, kel=? WHERE id=1''', (nama, nip, kpm, prov, kab, kec, kel))
     conn.commit(); conn.close()
 
+def simpan_riwayat(rhk, judul, lokasi):
+    try:
+        conn = sqlite3.connect('riwayat_v53.db'); c = conn.cursor()
+        tgl = datetime.now().strftime("%Y-%m-%d %H:%M")
+        c.execute('INSERT INTO riwayat (tgl, rhk, judul, lokasi) VALUES (?, ?, ?, ?)', (tgl, rhk, judul, lokasi))
+        conn.commit(); conn.close()
+    except: pass
+
+# ==========================================
+# 3. FUNGSI PENDUKUNG (GAMBAR & DOC)
+# ==========================================
 def compress_image(uploaded_file):
     try:
         uploaded_file.seek(0); image = Image.open(uploaded_file)
@@ -147,10 +116,6 @@ def compress_image(uploaded_file):
         return output
     except: uploaded_file.seek(0); return uploaded_file 
 
-def get_archived_photos(rhk, periode): return [] # Placeholder agar tidak error
-def load_photo_from_disk(rhk, periode, filename): return None # Placeholder
-def auto_save_photo_local(f, rhk, periode): pass # Placeholder
-
 def reset_states():
     for k in ['rhk2_queue','rhk4_queue','rhk7_queue','generated_file_data','rhk3_results']:
         st.session_state[k] = [] if 'queue' in k else None
@@ -158,6 +123,10 @@ def reset_states():
 def update_tanggal():
     d = "28" if st.session_state['bln_val'] == "FEBRUARI" else "30"
     st.session_state['tgl_val'] = f"{d} {st.session_state['bln_val'].title()} {st.session_state['th_val']}"
+
+def get_archived_photos(rhk, periode): return [] # Placeholder
+def load_photo_from_disk(rhk, periode, filename): return None # Placeholder
+def auto_save_photo_local(f, rhk, periode): pass # Placeholder
 
 def safe_str(data):
     if data is None: return "-"
@@ -176,7 +145,7 @@ def generate_isi_laporan(topik, detail, kpm_total, kpm_fokus, bulan, lokasi, ket
     if not FINAL_API_KEY: st.error("⚠️ API Key Kosong!"); return None
     try:
         genai.configure(api_key=FINAL_API_KEY)
-        # Gunakan 'gemini-flash-latest' sesuai permintaan, dengan fallback ke model lain jika gagal
+        # Mencoba berbagai model untuk menghindari error 404
         models_to_try = ['gemini-flash-latest', 'gemini-1.5-flash', 'gemini-pro']
         
         prompt = f"""
@@ -190,9 +159,9 @@ def generate_isi_laporan(topik, detail, kpm_total, kpm_fokus, bulan, lokasi, ket
                 model = genai.GenerativeModel(model_name)
                 res = model.generate_content(prompt)
                 return json.loads(res.text.replace("```json", "").replace("```", "").strip())
-            except: continue # Coba model berikutnya jika gagal
-        
-        st.error("Gagal menghubungi semua model AI. Cek kuota API.")
+            except: continue
+            
+        st.error("Gagal menghubungi semua model AI. Cek kuota API atau update requirements.txt.")
         return None
     except: return None
 
@@ -241,10 +210,13 @@ def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
     try:
         pdf = FPDF(); pdf.add_page(); pdf.set_font("Times", size=12)
         if kop:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp: tmp.write(kop); pth=tmp.name
-            pdf.image(pth, x=10, y=10, w=190); os.unlink(pth)
-        pdf.ln(30 if kop else 10); pdf.set_font("Times", "B", 14)
-        pdf.multi_cell(0, 6, f"LAPORAN\nTENTANG\n{meta['judul'].upper()}\n{meta['bulan'].upper()}", align='C'); pdf.ln(10)
+            try:
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp: tmp.write(kop); pth=tmp.name
+                pdf.image(pth, x=10, y=10, w=190); os.unlink(pth)
+            except: pdf.ln(10)
+        else: pdf.ln(10)
+        
+        pdf.set_font("Times", "B", 14); pdf.multi_cell(0, 6, f"LAPORAN\nTENTANG\n{meta['judul'].upper()}\n{meta['bulan'].upper()}", align='C'); pdf.ln(10)
         
         pdf.set_font("Times", "", 12)
         def add_sec(t, c):
@@ -261,72 +233,73 @@ def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
         pdf.ln(10); start_x = 120; pdf.set_x(start_x)
         pdf.multi_cell(0, 5, f"Dibuat di {meta['kab']}\nTanggal {meta['tgl']}\nPendamping PKH", align='C'); pdf.ln(20)
         pdf.set_x(start_x); pdf.multi_cell(0, 5, f"{meta['nama']}\nNIP. {meta['nip']}", align='C')
-        
-        # Foto PDF (Simple)
-        if imgs:
-            pdf.add_page(); pdf.cell(0, 10, "DOKUMENTASI", ln=True, align='C')
-            # Implementasi foto di PDF bisa ditambahkan disini jika diperlukan
-            
         return pdf.output(dest='S').encode('latin-1')
     except: return None
 
 # ==========================================
-# 4. TAMPILAN UTAMA (UI PROFESIONAL)
+# 4. TAMPILAN UTAMA
 # ==========================================
-def main_app():
-    # --- LOGIN SCREEN ---
-    if not st.session_state['password_correct']:
-        st.markdown("<br><br>", unsafe_allow_html=True)
-        c1, c2, c3 = st.columns([1, 2, 1])
-        with c2:
-            st.markdown('<div class="login-container"><h2>🔐 RHK PKH Pro</h2><p>Login Sistem</p></div>', unsafe_allow_html=True)
-            u = st.text_input("Username")
-            p = st.text_input("Password", type="password")
-            if st.button("MASUK", type="primary", use_container_width=True):
-                if u in DAFTAR_USER and DAFTAR_USER[u] == p:
-                    st.session_state['password_correct'] = True; st.session_state['username'] = u; st.rerun()
-                else: st.error("Login Gagal")
-        return
+def check_password():
+    if st.session_state.get("password_correct", False): return True
+    st.markdown("<br><br><h1 style='text-align: center;'>🔐 LOGIN APLIKASI</h1>", unsafe_allow_html=True)
+    c1, c2, c3 = st.columns([1, 2, 1])
+    with c2:
+        u = st.text_input("Username"); p = st.text_input("Password", type="password")
+        if st.button("MASUK / LOGIN", type="primary", use_container_width=True):
+            if u in DAFTAR_USER and DAFTAR_USER[u] == p:
+                st.session_state['password_correct'] = True; st.session_state['username'] = u; st.rerun()
+            else: st.error("Login Gagal!")
+    return False
 
-    # --- SIDEBAR (EXPANDER) ---
-    init_db(); u_nama, u_nip, u_kpm, u_prov, u_kab, u_kec, u_kel = get_user_settings()
+def main_app():
+    # --- LOGOUT ---
     with st.sidebar:
-        st.title("⚙️ PENGATURAN")
-        with st.expander("👤 Profil Pendamping", expanded=True):
-            nama = st.text_input("Nama", u_nama); nip = st.text_input("NIP", u_nip); kpm = st.number_input("Total KPM", value=u_kpm)
-        with st.expander("🌍 Wilayah Kerja"):
-            prov = st.text_input("Provinsi", u_prov); kab = st.text_input("Kabupaten", u_kab); kec = st.text_input("Kecamatan", u_kec); kel = st.text_input("Kelurahan", u_kel)
-        with st.expander("📅 Tanggal Surat"):
-            c1, c2 = st.columns(2)
-            with c1: st.session_state['th_val'] = st.selectbox("Tahun", ["2026", "2027"])
-            with c2: st.session_state['bln_val'] = st.selectbox("Bulan", ["JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI", "JULI", "AGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DESEMBER"], on_change=update_tanggal)
-            st.session_state['tgl_val'] = st.text_input("Format Full", st.session_state['tgl_val'])
-        with st.expander("🖼️ Atribut Dokumen"):
-            k = st.file_uploader("Kop Surat", type=['png','jpg']); t = st.file_uploader("Tanda Tangan", type=['png','jpg'])
-            if k: st.session_state['kop_bytes'] = k.getvalue()
-            if t: st.session_state['ttd_bytes'] = t.getvalue()
-        
-        if st.button("💾 SIMPAN DATA", type="primary", use_container_width=True): 
-            save_user_settings(nama, nip, kpm, prov, kab, kec, kel); st.success("Profil Tersimpan!")
-        
-        st.markdown("---")
-        if st.button("🔒 Logout"): st.session_state['password_correct'] = False; st.rerun()
+        st.write(f"👤 Login: **{st.session_state.get('username')}**")
+        if st.button("🔒 Logout", type="secondary"):
+            st.session_state["password_correct"] = False; st.rerun()
+
+    init_db(); u_nama, u_nip, u_kpm, u_prov, u_kab, u_kec, u_kel = get_user_settings()
+    
+    st.sidebar.header("👤 Profil")
+    nama = st.sidebar.text_input("Nama", u_nama); nip = st.sidebar.text_input("NIP", u_nip)
+    kpm = st.sidebar.number_input("KPM", value=u_kpm)
+    
+    st.sidebar.markdown("### 🌍 Wilayah")
+    prov = st.sidebar.text_input("Provinsi", u_prov); kab = st.sidebar.text_input("Kabupaten", u_kab)
+    kec = st.sidebar.text_input("Kecamatan", u_kec); kel = st.sidebar.text_input("Kelurahan", u_kel)
+    
+    st.sidebar.markdown("### 📅 Periode")
+    c1, c2 = st.sidebar.columns([1, 1.5])
+    with c1: st.selectbox("Tahun", ["2026", "2027"], key="th_val", on_change=update_tanggal)
+    with c2: st.selectbox("Bulan", ["JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI", "JULI", "AGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DESEMBER"], on_change=update_tanggal)
+    
+    st.sidebar.text_input("Tanggal Surat", key="tgl_val")
+    st.sidebar.markdown("---")
+    
+    st.sidebar.header("🖼️ Atribut")
+    k = st.sidebar.file_uploader("Kop Surat", type=['png','jpg']); t = st.sidebar.file_uploader("Tanda Tangan", type=['png','jpg'])
+    if st.sidebar.button("💾 SIMPAN PROFIL"):
+        save_user_settings(nama, nip, kpm, prov, kab, kec, kel)
+        if k: st.session_state['kop_bytes'] = k.getvalue()
+        if t: st.session_state['ttd_bytes'] = t.getvalue()
+        st.sidebar.success("Tersimpan!")
 
     # --- HOME PAGE ---
     if st.session_state['page'] == 'home':
         st.markdown(f"## 👋 Selamat Datang, {st.session_state['username']}!")
-        st.markdown("Pilih menu laporan di bawah ini:")
+        st.markdown("### Menu Utama")
         
         cols = st.columns(4); rhk_keys = list(CONFIG_LAPORAN.keys())
         for i, rhk in enumerate(rhk_keys):
             icon = "📄"; parts = rhk.split("–"); label = f"{icon}\n{parts[0].strip()}\n{parts[-1].strip()}"
             with cols[i % 4]:
-                if st.button(label, key=f"btn_{i}"):
+                if st.button(label, key=f"btn_{i}", use_container_width=True):
                     st.session_state['selected_rhk'] = rhk; st.session_state['page'] = 'detail'; reset_states(); st.rerun()
 
     # --- DETAIL PAGE ---
     elif st.session_state['page'] == 'detail':
         rhk = st.session_state['selected_rhk']
+        
         c_nav1, c_nav2 = st.columns([1, 6])
         if c_nav1.button("🏠 KEMBALI"): st.session_state['page'] = 'home'; st.rerun()
         c_nav2.markdown(f"### 📝 {rhk}")
@@ -370,7 +343,7 @@ def main_app():
                 for i, kpm in enumerate(kpms):
                     nm = kpm['Nama'] if kpm else "Kegiatan"
                     info.info(f"⏳ Memproses: {nm}...")
-                    time.sleep(2) # Delay agar API aman
+                    time.sleep(2)
                     
                     meta = {'judul': judul, 'bulan': f"{st.session_state['bln_val']} {st.session_state['th_val']}", 'nama': nama, 'nip': nip, 'kab': kab, 'tgl': st.session_state['tgl_val']}
                     data = generate_isi_laporan(rhk, judul, kpm, "Peserta", meta['bulan'], f"{kel}, {kec}", ket_info=ket)
@@ -391,7 +364,7 @@ def main_app():
             c2.download_button("Download PDF", f['p'], "Laporan.pdf")
 
 # ==========================================
-# 8. MAIN EXECUTION
+# 5. MAIN EXECUTION
 # ==========================================
 if __name__ == "__main__":
     if check_password(): main_app()
