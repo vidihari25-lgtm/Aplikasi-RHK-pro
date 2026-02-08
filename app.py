@@ -116,7 +116,6 @@ def clean_text_for_pdf(text):
     if text is None: return "-" 
     text = str(text) 
     text = text.replace('\u2013', '-').replace('\u201c', '"').replace('\u201d', '"')
-    # Replace karakter aneh lainnya jika perlu
     return text.encode('latin-1', 'replace').decode('latin-1')
 
 # ==========================================
@@ -132,7 +131,6 @@ except Exception as e:
     st.error(f"Gagal konfigurasi AI: {e}")
 
 def generate_isi_laporan(topik, detail, kpm_total, kpm_fokus, bulan, lokasi_lengkap, ket_info=""):
-    # UPDATE PROMPT: Menambahkan instruksi bahasa birokrasi
     prompt = f"""
     Role: Pendamping PKH Profesional Kemensos RI.
     Tugas: Buat JSON konten Laporan Kegiatan Bulanan.
@@ -145,7 +143,7 @@ def generate_isi_laporan(topik, detail, kpm_total, kpm_fokus, bulan, lokasi_leng
     
     Instruksi Gaya Bahasa:
     - Gunakan bahasa Indonesia yang baku, formal, dan bergaya birokrasi pemerintahan.
-    - Objektif, jelas, dan menggunakan istilah teknis pekerjaan sosial (KPM, Graduasi, P2K2, Termin, DTKS, SIKS-NG).
+    - Objektif, jelas, dan menggunakan istilah teknis pekerjaan sosial (KPM, Graduasi, P2K2, Termin, DTKS, SIKS-NG, SIKS-Mobile).
     - Hindari pengulangan kalimat yang tidak perlu.
     
     Output JSON (lowercase key):
@@ -166,7 +164,6 @@ def generate_isi_laporan(topik, detail, kpm_total, kpm_fokus, bulan, lokasi_leng
         text = response.text.replace("```json", "").replace("```", "").strip()
         return json.loads(text)
     except Exception as e:
-        # UPDATE: Error Handling lebih spesifik
         if "429" in str(e):
             st.error("⚠️ Kuota AI Penuh (Rate Limit). Tunggu 1 menit sebelum mencoba lagi.")
         else:
@@ -238,35 +235,23 @@ def create_word_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
     
     bio = io.BytesIO(); doc.save(bio); return bio
 
-# --- FUNGSI PDF DIPERBAIKI (UPDATED KOP 80%) ---
 def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
     if data is None: return None
     
-    # 1. Setup Halaman A4
     pdf = FPDF('P', 'mm', 'A4')
     pdf.set_auto_page_break(auto=True, margin=20)
     pdf.add_page()
     pdf.set_margins(20, 20, 20)
 
-    # 2. KOP SURAT (Revisi: Lebar 80% dari A4)
     if kop:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
             tmp.write(kop)
             tmp.flush()
             tmp_path = tmp.name
         try:
-            # Hitung Dimensi
-            # Lebar A4 = 210mm
-            # Lebar Kop 80% = 210 * 0.8 = 168mm
-            # Posisi X agar tengah = (210 - 168) / 2 = 21mm
-            
             w_kop = 210 * 0.8
             x_kop = (210 - w_kop) / 2
-            
-            # Pasang Gambar
             pdf.image(tmp_path, x=x_kop, y=0, w=w_kop)
-            
-            # Paksa kursor turun 38mm agar tidak menimpa kop (atur sesuai tinggi kop visual)
             pdf.set_y(38) 
         except: 
             pdf.ln(10)
@@ -275,33 +260,27 @@ def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
     else:
         pdf.ln(10)
 
-    # 3. JUDUL
     pdf.set_font("Arial", "B", 12)
     title_text = f"LAPORAN\nTENTANG\n{clean_text_for_pdf(meta['judul'].upper())}\n{clean_text_for_pdf(meta['bulan'].upper())}"
     pdf.multi_cell(0, 6, title_text, align='C')
     pdf.ln(8)
 
-    # Helper Section
     def add_section_pdf(title, content, is_list=False):
         pdf.set_font("Arial", "B", 11)
         pdf.cell(0, 7, clean_text_for_pdf(title), ln=True)
         pdf.set_font("Arial", "", 11)
-        
         if content is None: content = "-"
-        
         if is_list and isinstance(content, list):
             for item in content:
-                pdf.set_x(25) # Indentasi
+                pdf.set_x(25)
                 pdf.multi_cell(0, 6, f"- {clean_text_for_pdf(item)}")
         else:
             pdf.multi_cell(0, 6, clean_text_for_pdf(str(content)))
         pdf.ln(3)
 
-    # Isi Laporan
     add_section_pdf("A. Pendahuluan", data.get('gambaran_umum'))
     add_section_pdf("B. Maksud & Tujuan", data.get('maksud_tujuan'))
 
-    # C. Pelaksanaan
     pdf.set_font("Arial", "B", 11)
     pdf.cell(0, 7, "C. Pelaksanaan Kegiatan", ln=True)
     pdf.set_font("Arial", "", 11)
@@ -330,30 +309,24 @@ def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
     add_section_pdf("D. Hasil", data.get('hasil', True))
     add_section_pdf("E. Penutup", data.get('penutup'))
 
-    # 4. TANDA TANGAN (Layout Kanan)
     if pdf.get_y() > 220: pdf.add_page()
     else: pdf.ln(10)
     
     pdf.set_font("Arial", "", 11)
-    x_block = 130 # Koordinat X untuk blok kanan
-    w_block = 60  # Lebar blok tanda tangan
+    x_block = 130; w_block = 60
     
-    # Tanggal & Jabatan
     pdf.set_x(x_block)
     pdf.multi_cell(w_block, 6, f"{clean_text_for_pdf(meta['kab'])}, {clean_text_for_pdf(meta['tgl'])}", align='C')
     pdf.set_x(x_block)
     pdf.multi_cell(w_block, 6, "Pengelola Layanan Operasional", align='C')
     
-    # Gambar TTD
     if ttd:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_ttd:
             tmp_ttd.write(ttd)
             tmp_ttd.flush()
-            tmp_ttd.flush()
             ttd_path = tmp_ttd.name
         try:
             y_img = pdf.get_y()
-            # Gambar ditaruh di tengah blok, tinggi fix 25mm
             pdf.image(ttd_path, x=x_block + 5, y=y_img, h=25)
             pdf.set_y(y_img + 27)
         except: pdf.ln(25)
@@ -362,16 +335,13 @@ def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
     else:
         pdf.ln(25)
     
-    # Nama & NIP
     pdf.set_x(x_block)
     pdf.set_font("Arial", "BU", 11)
     pdf.cell(w_block, 6, clean_text_for_pdf(meta['nama']), ln=True, align='C')
-    
     pdf.set_x(x_block)
     pdf.set_font("Arial", "", 11)
     pdf.cell(w_block, 6, f"NIP. {clean_text_for_pdf(meta['nip'])}", ln=True, align='C')
 
-    # 5. DOKUMENTASI
     if imgs:
         pdf.add_page()
         pdf.set_font("Arial", "B", 12)
@@ -502,72 +472,37 @@ if check_password():
             r_key = q_key.replace('queue', 'results')
             st.info("💡 **Mode Antrian:** Masukkan kegiatan satu per satu, lalu klik 'Generate Semua'.")
             
-            # --- UPDATE: DATA MODUL P2K2 ---
+            # --- DATA MODUL P2K2 ---
             DATA_P2K2 = {
-                "Modul Ekonomi": [
-                    "1. Mengelola Keuangan Keluarga",
-                    "2. Cermat Meminjam dan Menabung",
-                    "3. Memulai Usaha"
-                ],
-                "Modul Kesehatan dan Gizi": [
-                    "1. Pentingnya Gizi dan Layanan Ibu Hamil",
-                    "2. Pentingnya Gizi Untuk Ibu Menyusui dan Balita",
-                    "3. Kesakitan pada Anak dan Kesehatan Lingkungan"
-                ],
-                "Modul Kesejahteraan": [
-                    "1. Pelayanan bagi Penyandang Disabilitas Berat",
-                    "2. Pentingnya Kesejahteraan Lanjut Usia"
-                ],
-                "Modul Pengasuhan dan Pendidikan": [
-                    "1. Menjadi Orang Tua yang Lebih Baik",
-                    "2. Memahami Perilaku Anak",
-                    "3. Memahami Cara Anak Usia Dini Belajar",
-                    "4. Membantu Anak Sukses di Sekolah"
-                ],
-                "Modul Perlindungan Anak": [
-                    "1. Pencegahan Kekerasan Terhadap Anak",
-                    "2. Penelantaran dan Eksploitasi Anak"
-                ],
-                "Modul Stunting": [
-                    "1. Pencegahan dan Penanganan Stunting",
-                    "2. Dukungan Pemenuhan Kesejahteraan Bayi Baru Lahir dan Ibu Menyusui"
-                ]
+                "Modul Ekonomi": ["1. Mengelola Keuangan Keluarga", "2. Cermat Meminjam dan Menabung", "3. Memulai Usaha"],
+                "Modul Kesehatan dan Gizi": ["1. Pentingnya Gizi dan Layanan Ibu Hamil", "2. Pentingnya Gizi Untuk Ibu Menyusui dan Balita", "3. Kesakitan pada Anak dan Kesehatan Lingkungan"],
+                "Modul Kesejahteraan": ["1. Pelayanan bagi Penyandang Disabilitas Berat", "2. Pentingnya Kesejahteraan Lanjut Usia"],
+                "Modul Pengasuhan dan Pendidikan": ["1. Menjadi Orang Tua yang Lebih Baik", "2. Memahami Perilaku Anak", "3. Memahami Cara Anak Usia Dini Belajar", "4. Membantu Anak Sukses di Sekolah"],
+                "Modul Perlindungan Anak": ["1. Pencegahan Kekerasan Terhadap Anak", "2. Penelantaran dan Eksploitasi Anak"],
+                "Modul Stunting": ["1. Pencegahan dan Penanganan Stunting", "2. Dukungan Pemenuhan Kesejahteraan Bayi Baru Lahir dan Ibu Menyusui"]
             }
 
             # --- KHUSUS RHK 2 (MODUL P2K2) ---
             if "RHK 2" in rhk:
-                # Selectbox ditaruh DI LUAR form agar interaktif (Modul -> Sesi berubah otomatis)
                 kegiatan = st.selectbox("Sub-Kegiatan", CONFIG_LAPORAN[rhk])
-                
                 col_m1, col_m2 = st.columns(2)
                 with col_m1:
-                    # Pilih Modul
                     pilih_modul = st.selectbox("Pilih Modul P2K2", list(DATA_P2K2.keys()), key="p2k2_modul_sel")
                 with col_m2:
-                    # Pilih Sesi (Otomatis berubah sesuai Modul yang dipilih)
                     opsi_sesi = DATA_P2K2.get(pilih_modul, ["-"])
                     pilih_sesi = st.selectbox("Pilih Sesi", opsi_sesi, key="p2k2_sesi_sel")
 
-                # Form Sisanya (Keterangan & Foto)
                 with st.form("queue_form_rhk2", clear_on_submit=True):
                     ket_q = st.text_input("Keterangan Tambahan", placeholder="Nama Kelompok / Lokasi / Jumlah Peserta...")
                     fotos = st.file_uploader("Foto Kegiatan", accept_multiple_files=True, type=['jpg','png'])
-                    
                     if st.form_submit_button("➕ Tambah ke Antrian"):
                         if not fotos:
                             st.error("❌ Foto wajib diupload!")
                         else:
-                            # Gabungkan Modul & Sesi ke dalam judul/keterangan agar masuk laporan
                             final_judul = f"{kegiatan} - {pilih_modul}"
                             final_ket = f"Materi: {pilih_sesi}. Keterangan: {ket_q}"
-                            
-                            st.session_state[q_key].append({
-                                "kegiatan": final_judul, 
-                                "ket": final_ket, 
-                                "fotos": [io.BytesIO(f.getvalue()) for f in fotos]
-                            })
-                            st.success(f"Berhasil: {pilih_sesi} ditambahkan!")
-                            st.rerun()
+                            st.session_state[q_key].append({"kegiatan": final_judul, "ket": final_ket, "fotos": [io.BytesIO(f.getvalue()) for f in fotos]})
+                            st.success(f"Berhasil: {pilih_sesi} ditambahkan!"); st.rerun()
 
             # --- UNTUK RHK 3 DAN RHK 8 (FORMAT LAMA) ---
             else:
@@ -582,26 +517,21 @@ if check_password():
                             st.session_state[q_key].append({"kegiatan": kegiatan, "ket": ket_q, "fotos": [io.BytesIO(f.getvalue()) for f in fotos]})
                             st.success("Masuk antrian!"); st.rerun()
             
-            # --- TAMPILAN ANTRIAN (DENGAN FITUR HAPUS) ---
+            # --- TAMPILAN ANTRIAN ---
             queue = st.session_state[q_key]
             if queue:
                 st.write(f"**Antrian ({len(queue)} Item):**")
-                
-                # Loop dengan fitur Hapus
                 for i, q in enumerate(queue):
                     col_txt, col_del = st.columns([0.85, 0.15])
-                    with col_txt:
-                        st.text(f"{i+1}. {q['kegiatan']} - {q['ket']}")
+                    with col_txt: st.text(f"{i+1}. {q['kegiatan']} - {q['ket']}")
                     with col_del:
                         if st.button("🗑️ Hapus", key=f"del_{q_key}_{i}"):
-                            st.session_state[q_key].pop(i)
-                            st.rerun()
+                            st.session_state[q_key].pop(i); st.rerun()
 
                 if st.button("🚀 GENERATE SEMUA", type="primary"):
                     results = []; bar = st.progress(0)
                     with st.spinner("Sedang menghubungi AI dan menyusun dokumen..."):
                         for i, item in enumerate(queue):
-                            # Panggil AI generate
                             jd = generate_isi_laporan(rhk, item['kegiatan'], u_kpm, "Peserta", meta['bulan'], lokasi, item['ket'])
                             if jd: 
                                 w = create_word_doc(jd, meta, item['fotos'], st.session_state['kop_bytes'], st.session_state['ttd_bytes'], item['ket'])
@@ -618,6 +548,7 @@ if check_password():
                     with c2: 
                         if r.get('file_pdf'): st.download_button(f"📕 PDF: {r['judul']}", r['file_pdf'], f"{r['judul']}.pdf", key=f"dp{i}", use_container_width=True)
 
+        # --- RHK 4 (GRADUASI) ---
         elif "RHK 4" in rhk:
             st.info("ℹ️ **Mode Graduasi:** Upload Excel KPM.")
             df_tmpl = pd.DataFrame({"Nama": ["Budi"], "NIK": ["123"], "Alamat": ["Desa A"], "Kategori": ["PKH"], "Status": ["Graduasi"], "Alasan": ["Mampu"]})
@@ -652,6 +583,52 @@ if check_password():
                     with c2: 
                         if r.get('file_pdf'): st.download_button(f"📥 PDF: {r['judul']}", r['file_pdf'], f"Graduasi_{r['judul']}.pdf", key=f"dgp{i}", use_container_width=True)
 
+        # --- UPDATE BARU: RHK 5 (VERIVALI DENGAN PILIHAN APLIKASI) ---
+        elif "RHK 5" in rhk:
+            st.info("ℹ️ **Mode Verivali:** Pilih aplikasi yang digunakan untuk verifikasi.")
+            
+            LIST_APPS = [
+                "SIKS-NG (Sistem Informasi Kesejahteraan Sosial - Next Generation)",
+                "SIKS-Mobile (Android)",
+                "Aplikasi Cek Bansos",
+                "DTKS Offline / Excel",
+                "Verifikasi Manual / Berkas Fisik"
+            ]
+            
+            with st.form("rhk5_form"):
+                kegiatan = st.selectbox("Sub-Kegiatan", CONFIG_LAPORAN[rhk])
+                aplikasi = st.selectbox("Aplikasi / Media", LIST_APPS)
+                ket = st.text_area("Keterangan Tambahan", placeholder="Contoh: Perbaikan data anomali rekening...")
+                fotos = st.file_uploader("Foto Bukti (Screenshot Aplikasi/Lapangan)", accept_multiple_files=True)
+                
+                if st.form_submit_button("🚀 BUAT LAPORAN VERIVALI", type="primary"):
+                    if not fotos:
+                        st.error("Foto wajib!")
+                    else:
+                        # Gabungkan Aplikasi ke dalam context AI
+                        full_context = f"Menggunakan {aplikasi}. {ket}"
+                        
+                        with st.spinner("Mengolah data Verivali..."):
+                            jd = generate_isi_laporan(rhk, kegiatan, u_kpm, "KPM", meta['bulan'], lokasi, full_context)
+                            if jd:
+                                imgs_data = [io.BytesIO(f.getvalue()) for f in fotos]
+                                w = create_word_doc(jd, meta, imgs_data, st.session_state['kop_bytes'], st.session_state['ttd_bytes'], full_context)
+                                p = create_pdf_doc(jd, meta, imgs_data, st.session_state['kop_bytes'], st.session_state['ttd_bytes'], full_context)
+                                
+                                st.session_state['generated_file_data'] = {"name": f"Laporan {kegiatan}", "file": w, "file_pdf": p}
+                                st.rerun()
+                            else: st.error("Gagal koneksi AI, coba lagi.")
+            
+            # (Reuse Download Logic)
+            if st.session_state.get('generated_file_data'):
+                f = st.session_state['generated_file_data']
+                st.success("Selesai!")
+                c1, c2 = st.columns(2)
+                with c1: st.download_button("📥 Download Word", f['file'], f"{f['name']}.docx", type="primary", use_container_width=True)
+                with c2: 
+                    if f.get('file_pdf'): st.download_button("📕 Download PDF", f['file_pdf'], f"{f['name']}.pdf", type="secondary", use_container_width=True)
+
+        # --- RHK LAINNYA (1, 6, 7, 9) ---
         else:
             with st.form("std_form"):
                 try: jk = st.selectbox("Kegiatan", CONFIG_LAPORAN[rhk])
