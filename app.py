@@ -369,7 +369,7 @@ if check_password():
         
         # --- FOOTER CREATED BY ---
         st.markdown("---")
-        st.markdown("""<div style='text-align: center; color: grey; font-size: 11px;'>Created by:<br><b>[VDSTUDIO]</b><br>&copy; 2026 RHK PKH Pro</div>""", unsafe_allow_html=True)
+        st.markdown("""<div style='text-align: center; color: grey; font-size: 11px;'>Created by:<br><b>[VDStudio]</b><br>&copy; 2026 RHK PKH Pro</div>""", unsafe_allow_html=True)
 
     def show_dashboard():
         st.title("📂 Aplikasi RHK PKH Pro 2.0"); cols = st.columns(3)
@@ -539,3 +539,4 @@ if check_password():
     if st.session_state['page'] == 'home': show_dashboard()
     elif st.session_state['page'] == 'history': show_history_page()
     else: show_detail()
+
