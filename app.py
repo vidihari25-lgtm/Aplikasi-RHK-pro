@@ -317,6 +317,128 @@ if check_password():
         
         bio = io.BytesIO(); doc.save(bio); return bio
 
+    # --- FUNGSI BARU: CREATE PDF DOC ---
+    def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
+        if data is None: return None
+        
+        pdf = FPDF()
+        pdf.set_auto_page_break(auto=True, margin=20)
+        pdf.add_page()
+        pdf.set_margins(25, 20, 25)
+
+        # 1. KOP SURAT
+        if kop:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+                tmp.write(kop)
+                tmp_path = tmp.name
+            try:
+                # Adjust width and position similar to Word
+                pdf.image(tmp_path, x=10, y=10, w=190)
+                pdf.ln(35) # Spasi setelah kop
+            except: pass
+            finally:
+                if os.path.exists(tmp_path): os.remove(tmp_path)
+        else:
+            pdf.ln(10)
+
+        # 2. JUDUL
+        pdf.set_font("Arial", "B", 12)
+        title_text = f"LAPORAN\nTENTANG\n{clean_text_for_pdf(meta['judul'].upper())}\n{clean_text_for_pdf(meta['bulan'].upper())}"
+        pdf.multi_cell(0, 6, title_text, align='C')
+        pdf.ln(10)
+
+        # Helper Section
+        def add_section_pdf(title, content, is_list=False):
+            pdf.set_font("Arial", "B", 11)
+            pdf.cell(0, 8, clean_text_for_pdf(title), ln=True)
+            pdf.set_font("Arial", "", 11)
+            
+            if content is None: content = "-"
+            if is_list and isinstance(content, list):
+                for item in content:
+                    pdf.multi_cell(0, 6, f"- {clean_text_for_pdf(item)}")
+            else:
+                pdf.multi_cell(0, 6, clean_text_for_pdf(content))
+            pdf.ln(3)
+
+        # 3. ISI LAPORAN
+        add_section_pdf("A. Pendahuluan", data.get('gambaran_umum'))
+        add_section_pdf("B. Maksud & Tujuan", data.get('maksud_tujuan'))
+
+        # C. Pelaksanaan
+        pdf.set_font("Arial", "B", 11)
+        pdf.cell(0, 8, "C. Pelaksanaan Kegiatan", ln=True)
+        pdf.set_font("Arial", "", 11)
+        if extra_info:
+            pdf.set_font("Arial", "I", 10)
+            pdf.multi_cell(0, 6, f"Catatan: {clean_text_for_pdf(extra_info)}")
+            pdf.set_font("Arial", "", 11)
+        
+        keg = data.get('kegiatan', [])
+        if keg:
+            for k in keg:
+                pdf.multi_cell(0, 6, f"- {clean_text_for_pdf(k)}")
+        pdf.ln(3)
+
+        # Data KPM (Jika Ada)
+        if kpm_data:
+            pdf.set_font("Arial", "B", 11)
+            pdf.cell(0, 8, "Data KPM Terkait:", ln=True)
+            pdf.set_font("Arial", "", 10)
+            for k, v in kpm_data.items():
+                pdf.cell(60, 6, clean_text_for_pdf(k), border=1)
+                pdf.multi_cell(0, 6, clean_text_for_pdf(v), border=1)
+            pdf.ln(5)
+
+        add_section_pdf("D. Hasil", data.get('hasil'), True)
+        add_section_pdf("E. Penutup", data.get('penutup'))
+
+        # 4. TANDA TANGAN
+        pdf.ln(10)
+        pdf.set_font("Arial", "", 11)
+        # Posisi TTD di Kanan
+        x_right = 110
+        pdf.set_x(x_right)
+        pdf.multi_cell(80, 6, f"{clean_text_for_pdf(meta['kab'])}, {clean_text_for_pdf(meta['tgl'])}\nPengelola Layanan Operasional", align='C')
+        
+        if ttd:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_ttd:
+                tmp_ttd.write(ttd)
+                ttd_path = tmp_ttd.name
+            try:
+                pdf.image(ttd_path, x=x_right+15, y=pdf.get_y(), w=50)
+                pdf.ln(25) # Space for image height
+            except: pdf.ln(25)
+            finally:
+                if os.path.exists(ttd_path): os.remove(ttd_path)
+        else:
+            pdf.ln(25)
+        
+        pdf.set_x(x_right)
+        pdf.multi_cell(80, 6, f"\n{clean_text_for_pdf(meta['nama'])}\nNIP. {clean_text_for_pdf(meta['nip'])}", align='C')
+
+        # 5. DOKUMENTASI
+        if imgs:
+            pdf.add_page()
+            pdf.set_font("Arial", "B", 12)
+            pdf.cell(0, 10, "DOKUMENTASI", ln=True, align='C')
+            for img_bytes in imgs:
+                # Compress image first to avoid huge PDF
+                compressed = compress_image(img_bytes)
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_img:
+                    tmp_img.write(compressed.getvalue())
+                    img_path = tmp_img.name
+                try:
+                    # Centered Image
+                    pdf.image(img_path, x=35, w=140) 
+                    pdf.ln(5)
+                except: pass
+                finally:
+                    if os.path.exists(img_path): os.remove(img_path)
+
+        # Return Bytes
+        return pdf.output(dest='S').encode('latin-1')
+
     # ==========================================
     # 7. LOGIKA UI
     # ==========================================
@@ -400,14 +522,21 @@ if check_password():
                         jd = generate_isi_laporan(rhk, item['kegiatan'], u_kpm, "Peserta", meta['bulan'], lokasi, item['ket'])
                         if jd: 
                             w = create_word_doc(jd, meta, item['fotos'], st.session_state['kop_bytes'], st.session_state['ttd_bytes'], item['ket'])
-                            if w: results.append({"judul": item['kegiatan'], "file": w})
+                            # TAMBAHAN PDF
+                            p = create_pdf_doc(jd, meta, item['fotos'], st.session_state['kop_bytes'], st.session_state['ttd_bytes'], item['ket'])
+                            if w: results.append({"judul": item['kegiatan'], "file": w, "file_pdf": p})
                         bar.progress((i + 1) / len(queue))
                     st.session_state[r_key] = results; st.success("Selesai!"); st.rerun()
             
             if st.session_state.get(r_key):
                 st.write("### 📥 Download Hasil")
                 for i, r in enumerate(st.session_state[r_key]):
-                    st.download_button(f"📄 {r['judul']}", r['file'], f"{r['judul']}.docx", key=f"dl_{i}")
+                    c_dl1, c_dl2 = st.columns(2)
+                    with c_dl1:
+                        st.download_button(f"📄 Word: {r['judul']}", r['file'], f"{r['judul']}.docx", key=f"dl_w_{i}", use_container_width=True)
+                    with c_dl2:
+                        if r.get('file_pdf'):
+                            st.download_button(f"📕 PDF: {r['judul']}", r['file_pdf'], f"{r['judul']}.pdf", key=f"dl_p_{i}", use_container_width=True)
 
         # TYPE 2: GRADUASI (RHK 4)
         elif "RHK 4" in rhk:
@@ -431,14 +560,21 @@ if check_password():
                                 jd = generate_isi_laporan(rhk, f"Graduasi {nm}", 1, nm, meta['bulan'], lokasi, f"Graduasi {nm}")
                                 if jd:
                                     w = create_word_doc(jd, meta, p_data, st.session_state['kop_bytes'], st.session_state['ttd_bytes'], f"Graduasi {nm}", row)
-                                    if w: res.append({"judul": nm, "file": w})
+                                    # TAMBAHAN PDF
+                                    p = create_pdf_doc(jd, meta, p_data, st.session_state['kop_bytes'], st.session_state['ttd_bytes'], f"Graduasi {nm}", row)
+                                    if w: res.append({"judul": nm, "file": w, "file_pdf": p})
                                 bar.progress((i+1)/len(sel_kpm))
                             st.session_state['rhk4_graduasi_results'] = res; st.rerun()
                 except: st.error("Format Excel Salah")
             
             if st.session_state.get('rhk4_graduasi_results'):
                 for i, r in enumerate(st.session_state['rhk4_graduasi_results']):
-                    st.download_button(f"📥 {r['judul']}", r['file'], f"Graduasi_{r['judul']}.docx", key=f"dlg_{i}")
+                    c_dl1, c_dl2 = st.columns(2)
+                    with c_dl1:
+                        st.download_button(f"📥 Word: {r['judul']}", r['file'], f"Graduasi_{r['judul']}.docx", key=f"dlg_w_{i}", use_container_width=True)
+                    with c_dl2:
+                        if r.get('file_pdf'):
+                            st.download_button(f"📥 PDF: {r['judul']}", r['file_pdf'], f"Graduasi_{r['judul']}.pdf", key=f"dlg_p_{i}", use_container_width=True)
 
         # TYPE 3: STANDAR (RHK 1, 5, 6, 7, 9)
         else:
@@ -453,16 +589,24 @@ if check_password():
                         with st.status("Sedang bekerja..."):
                             jd = generate_isi_laporan(rhk, jk, u_kpm, "Peserta", meta['bulan'], lokasi, ka)
                             if jd:
-                                w = create_word_doc(jd, meta, [io.BytesIO(f.getvalue()) for f in ft], st.session_state['kop_bytes'], st.session_state['ttd_bytes'], ka)
+                                imgs_data = [io.BytesIO(f.getvalue()) for f in ft]
+                                w = create_word_doc(jd, meta, imgs_data, st.session_state['kop_bytes'], st.session_state['ttd_bytes'], ka)
+                                # TAMBAHAN PDF
+                                p = create_pdf_doc(jd, meta, imgs_data, st.session_state['kop_bytes'], st.session_state['ttd_bytes'], ka)
                                 if w:
-                                    st.session_state['generated_file_data'] = {"name": f"Laporan {jk}", "file": w}
+                                    st.session_state['generated_file_data'] = {"name": f"Laporan {jk}", "file": w, "file_pdf": p}
                                     st.rerun()
                             else: st.error("Gagal koneksi AI, coba lagi.")
             
             if st.session_state.get('generated_file_data'):
                 f = st.session_state['generated_file_data']
                 st.success("Selesai!")
-                st.download_button("📥 Download Word", f['file'], f"{f['name']}.docx", type="primary")
+                c_dl1, c_dl2 = st.columns(2)
+                with c_dl1:
+                    st.download_button("📥 Download Word", f['file'], f"{f['name']}.docx", type="primary", use_container_width=True)
+                with c_dl2:
+                    if f.get('file_pdf'):
+                        st.download_button("📕 Download PDF", f['file_pdf'], f"{f['name']}.pdf", type="secondary", use_container_width=True)
 
     if st.session_state['page'] == 'home': show_dashboard()
     else: show_detail()
