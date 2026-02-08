@@ -44,13 +44,12 @@ except KeyError:
 # --- KONFIGURASI AI CERDAS (GEMINI 1.5 FLASH) ---
 try:
     genai.configure(api_key=GOOGLE_API_KEY)
-    # Menggunakan model flash yang lebih stabil dan cepat
     generation_config = {
-        "temperature": 0.7,  # Kreativitas seimbang
+        "temperature": 0.7,
         "top_p": 0.95,
         "top_k": 64,
         "max_output_tokens": 8192,
-        "response_mime_type": "application/json", # Memaksa output JSON murni
+        "response_mime_type": "application/json",
     }
     model = genai.GenerativeModel(
         model_name="gemini-1.5-flash",
@@ -132,17 +131,25 @@ if check_password():
     
     CONFIG_LAPORAN = {
         "RHK 1 – Laporan Penyaluran bansos": ["Laporan Penyaluran Bantuan Sosial"],
+        
         "RHK 2 – Laporan pertemuan P2K2": [
             "Modul Ekonomi 1: Mengelola Keuangan Keluarga", "Modul Ekonomi 2: Cermat Meminjam", "Modul Ekonomi 3: Memulai Usaha",
             "Modul Kesehatan 1: Gizi Ibu Hamil", "Modul Kesehatan 2: Gizi Balita", "Modul Kesehatan 3: Kesakitan Anak",
             "Modul Pengasuhan 1: Menjadi Orangtua Baik", "Modul Perlindungan 1: Anti Kekerasan Anak"
         ],
+        
         "RHK 3 – Laporan Verifikasi Komitmen data KPM": ["Verifikasi Pendidikan (Sekolah)", "Verifikasi Kesehatan (Posyandu)", "Verifikasi Kesos"],
+        
         "RHK 4 – Rekapitulasi Data KPM graduasi": ["Laporan Graduasi Mandiri"], 
+        
         "RHK 5 – Laporan Data Verifikasi, Validasi": ["Laporan Pemutakhiran Data KPM"],
+        
         "RHK 6 – Persentase penyelesaian laporan kasus adaptif": ["Laporan Penanganan Kasus (Case Management)"],
+        
         "RHK 7 – Laporan Bulanan ASN PPPK": ["Laporan Kinerja Bulanan ASN PPPK"],
+        
         "RHK 8 – Laporan pelaksana Tugas direktif": ["Tugas Direktif Pimpinan"],
+        
         "RHK 9 – Presentase Penyelesaian Penugasan Direktif": ["Evaluasi Penyelesaian Tugas"]
     }
 
@@ -348,7 +355,6 @@ if check_password():
     # --- DASHBOARD UTAMA ---
     def show_dashboard():
         st.title("📂 Aplikasi RHK PKH Pro (Smart Edition)")
-        st.info("💡 Versi ini menggunakan **Gemini 1.5 Flash** untuk kinerja tombol yang lebih responsif.")
         
         cols = st.columns(3)
         rhk_list = list(CONFIG_LAPORAN.keys())
@@ -359,7 +365,7 @@ if check_password():
                 st.markdown(f"""
                 <div style="background-color:#f0f2f6; padding:15px; border-radius:10px; margin-bottom:10px; border:1px solid #d1d5db;">
                     <h5 style="color:#1f2937; margin:0;">{rhk.split('–')[0]}</h5>
-                    <p style="font-size:12px; color:#4b5563;">{rhk.split('–')[1]}</p>
+                    <p style="font-size:12px; color:#4b5563;">{rhk.split('–')[-1]}</p>
                 </div>
                 """, unsafe_allow_html=True)
                 
@@ -369,23 +375,18 @@ if check_password():
                     st.session_state['page'] = 'detail'
                     st.rerun()
 
-    # --- HALAMAN DETAIL ---
-    # ==========================================
-    # BAGIAN YANG DIPERBAIKI (GANTI FUNGSI INI)
-    # ==========================================
+    # --- HALAMAN DETAIL (DENGAN FIX ERROR) ---
     def show_detail():
-        # Ambil data dari session
         rhk = st.session_state.get('selected_rhk')
         
-        # --- FIX: VALIDASI ANTI-CRASH ---
-        # Cek apakah rhk ada di dalam database CONFIG_LAPORAN
+        # --- ANTI-CRASH VALIDATION ---
+        # Jika session lama (key error) terdeteksi, reset ke home
         if rhk is None or rhk not in CONFIG_LAPORAN:
-            st.warning("⚠️ Data sesi kedaluwarsa. Mengembalikan ke Menu Utama...")
-            time.sleep(1)
-            st.session_state['page'] = 'home'
+            st.warning("⚠️ Sesi kedaluwarsa, kembali ke menu utama...")
             st.session_state['selected_rhk'] = None
+            st.session_state['page'] = 'home'
             st.rerun()
-            return # Hentikan fungsi agar tidak lanjut ke error
+            return
 
         # Header Navigasi
         c1, c2 = st.columns([1, 6])
@@ -398,7 +399,7 @@ if check_password():
         meta = {
             'bulan': f"{st.session_state.bln_val} {st.session_state.th_val}",
             'nama': u_nama, 'nip': u_nip, 'kab': u_kab, 'kec': u_kec, 'kel': u_kel,
-            'tgl': st.session_state.tgl_val, 'judul': rhk.split('–')[-1].strip().upper() # Fix split index
+            'tgl': st.session_state.tgl_val, 'judul': rhk.split('–')[-1].upper()
         }
         lokasi = f"{u_kel}, {u_kec}, {u_kab}"
         
@@ -415,7 +416,6 @@ if check_password():
             with st.form("queue_form", clear_on_submit=True):
                 col_a, col_b = st.columns(2)
                 with col_a:
-                    # DI SINI LETAK ERROR SEBELUMNYA (Sekarang aman karena validasi di atas)
                     kegiatan = st.selectbox("Pilih Sub-Kegiatan", CONFIG_LAPORAN[rhk])
                 with col_b:
                     ket_q = st.text_input("Keterangan Spesifik", placeholder="Lokasi spesifik / detail peserta...")
@@ -527,8 +527,8 @@ if check_password():
 
         # 3. Tipe Standar (RHK 1, 5, 6, 7, 9)
         else:
+            # GUNAKAN FORM DISINI AGAR TIDAK ERROR SAAT GANTI INPUT
             with st.form("std_form"):
-                # DI SINI JUGA LETAK ERROR SEBELUMNYA (Aman karena validasi)
                 judul_keg = st.selectbox("Pilih Kegiatan", CONFIG_LAPORAN[rhk])
                 ket_add = st.text_area("Keterangan Tambahan", height=100, placeholder="Ceritakan sedikit tentang kegiatan ini...")
                 fotos = st.file_uploader("Upload Foto", accept_multiple_files=True)
@@ -563,3 +563,11 @@ if check_password():
                 f = st.session_state['generated_file_data']
                 st.success("✅ Laporan Siap Unduh!")
                 st.download_button("📥 Download Word (.docx)", f['file'], f"{f['name']}.docx", type="primary", use_container_width=True)
+
+    # ==========================================
+    # 8. ROUTING UTAMA
+    # ==========================================
+    if st.session_state['page'] == 'home':
+        show_dashboard()
+    else:
+        show_detail()
