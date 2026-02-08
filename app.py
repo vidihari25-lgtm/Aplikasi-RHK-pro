@@ -544,6 +544,22 @@ if check_password():
         
         st.file_uploader("Tanda Tangan (JPG/PNG)", type=['png','jpg'], key="ttd_up")
         if st.session_state.get('ttd_up'): st.session_state['ttd_bytes'] = st.session_state['ttd_up'].getvalue()
+            # ... (Ini kode upload tanda tangan yang sudah ada) ...
+        st.file_uploader("Tanda Tangan (JPG/PNG)", type=['png','jpg'], key="ttd_up")
+        if st.session_state.get('ttd_up'): st.session_state['ttd_bytes'] = st.session_state['ttd_up'].getvalue()
+
+        # >>> TEMPEL KODE PENCIPTA DI SINI <<<
+        st.markdown("---")
+        st.markdown(
+            """
+            <div style='text-align: center; font-size: 12px; color: #666;'>
+                <small>Developed by</small><br>
+                <b>VDSTUDIO</b><br>
+                © 2026 RHK PKH Pro
+            </div>
+            """, 
+            unsafe_allow_html=True
+        )
 
     # UI MAIN
     def show_dashboard():
@@ -845,3 +861,4 @@ if check_password():
     if st.session_state['page'] == 'home': show_dashboard()
     elif st.session_state['page'] == 'history': show_history_page()
     else: show_detail()
+
