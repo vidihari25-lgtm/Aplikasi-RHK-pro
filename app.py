@@ -370,12 +370,26 @@ if check_password():
                     st.rerun()
 
     # --- HALAMAN DETAIL ---
+    # ==========================================
+    # BAGIAN YANG DIPERBAIKI (GANTI FUNGSI INI)
+    # ==========================================
     def show_detail():
-        rhk = st.session_state['selected_rhk']
+        # Ambil data dari session
+        rhk = st.session_state.get('selected_rhk')
         
+        # --- FIX: VALIDASI ANTI-CRASH ---
+        # Cek apakah rhk ada di dalam database CONFIG_LAPORAN
+        if rhk is None or rhk not in CONFIG_LAPORAN:
+            st.warning("⚠️ Data sesi kedaluwarsa. Mengembalikan ke Menu Utama...")
+            time.sleep(1)
+            st.session_state['page'] = 'home'
+            st.session_state['selected_rhk'] = None
+            st.rerun()
+            return # Hentikan fungsi agar tidak lanjut ke error
+
         # Header Navigasi
         c1, c2 = st.columns([1, 6])
-        if c1.button("⬅️ Kembali"):
+        if c1.button("⬅️ Kembali", use_container_width=True):
             st.session_state['page'] = 'home'
             st.rerun()
         c2.markdown(f"### 📝 {rhk}")
@@ -384,7 +398,7 @@ if check_password():
         meta = {
             'bulan': f"{st.session_state.bln_val} {st.session_state.th_val}",
             'nama': u_nama, 'nip': u_nip, 'kab': u_kab, 'kec': u_kec, 'kel': u_kel,
-            'tgl': st.session_state.tgl_val, 'judul': rhk.split('–')[1].upper()
+            'tgl': st.session_state.tgl_val, 'judul': rhk.split('–')[-1].strip().upper() # Fix split index
         }
         lokasi = f"{u_kel}, {u_kec}, {u_kab}"
         
@@ -395,15 +409,16 @@ if check_password():
             q_key = 'rhk2_queue' if "RHK 2" in rhk else ('rhk3_queue' if "RHK 3" in rhk else 'rhk8_queue')
             r_key = q_key.replace('queue', 'results')
             
-            st.success(f"Mode Antrian: Tambahkan kegiatan satu per satu, lalu Generate sekaligus.")
+            st.info(f"💡 **Mode Antrian:** Masukkan semua kegiatan dalam sebulan satu per satu, lalu klik 'Generate Semua' di bawah.")
             
-            # FORM INPUT ANTRIAN (Penting: Gunakan Form agar tidak refresh saat ketik)
+            # FORM INPUT ANTRIAN
             with st.form("queue_form", clear_on_submit=True):
                 col_a, col_b = st.columns(2)
                 with col_a:
+                    # DI SINI LETAK ERROR SEBELUMNYA (Sekarang aman karena validasi di atas)
                     kegiatan = st.selectbox("Pilih Sub-Kegiatan", CONFIG_LAPORAN[rhk])
                 with col_b:
-                    ket_q = st.text_input("Keterangan Spesifik", placeholder="Contoh: Di rumah Ibu Ani...")
+                    ket_q = st.text_input("Keterangan Spesifik", placeholder="Lokasi spesifik / detail peserta...")
                 
                 fotos = st.file_uploader("Upload Foto Bukti", accept_multiple_files=True, type=['jpg','png'])
                 add_btn = st.form_submit_button("➕ Tambahkan ke Antrian")
@@ -413,7 +428,6 @@ if check_password():
                         st.error("❌ Foto wajib ada!")
                     else:
                         foto_data = [io.BytesIO(f.getvalue()) for f in fotos]
-                        # Auto Save ke Arsip
                         [auto_save_photo_local(f, rhk, meta['bulan']) for f in fotos]
                         
                         st.session_state[q_key].append({
@@ -421,28 +435,28 @@ if check_password():
                             "ket": ket_q,
                             "fotos": foto_data
                         })
-                        st.success("✅ Masuk Antrian")
+                        st.success("✅ Berhasil masuk antrian")
                         st.rerun()
             
             # TAMPILAN ANTRIAN
             queue = st.session_state[q_key]
             if queue:
-                st.write(f"**Daftar Antrian ({len(queue)} Item):**")
+                st.write(f"**📋 Daftar Antrian ({len(queue)} Item):**")
                 for i, q in enumerate(queue):
                     st.text(f"{i+1}. {q['kegiatan']} ({len(q['fotos'])} Foto) - {q['ket']}")
                 
                 col_gen, col_clr = st.columns([3, 1])
-                if col_clr.button("Hapus Semua Antrian", key="clr_q"):
+                if col_clr.button("🗑️ Hapus Semua", key="clr_q"):
                     st.session_state[q_key] = []
                     st.rerun()
                 
-                if col_gen.button("🚀 GENERATE SEMUA LAPORAN", type="primary", key="gen_q"):
+                if col_gen.button("🚀 GENERATE SEMUA LAPORAN", type="primary", key="gen_q", use_container_width=True):
                     results = []
                     bar = st.progress(0)
                     status = st.empty()
                     
                     for i, item in enumerate(queue):
-                        status.write(f"⏳ Sedang memproses: {item['kegiatan']}...")
+                        status.write(f"⏳ Memproses ({i+1}/{len(queue)}): {item['kegiatan']}...")
                         json_data = generate_isi_laporan(rhk, item['kegiatan'], u_kpm, "Peserta", meta['bulan'], lokasi, item['ket'])
                         
                         if json_data:
@@ -452,7 +466,7 @@ if check_password():
                         bar.progress((i + 1) / len(queue))
                     
                     st.session_state[r_key] = results
-                    status.success("Selesai!")
+                    status.success("✅ Semua Laporan Selesai!")
                     st.rerun()
             
             # HASIL
@@ -461,69 +475,77 @@ if check_password():
                 st.write("---")
                 st.write("### 📥 Download Hasil")
                 for i, r in enumerate(res):
-                    st.download_button(f"📄 Download {r['judul']}", r['file'], file_name=f"{r['judul']}.docx", key=f"dl_{r_key}_{i}")
+                    c1, c2 = st.columns([4, 1])
+                    c1.write(f"📄 {r['judul']}")
+                    c2.download_button(f"Download", r['file'], file_name=f"{r['judul']}.docx", key=f"dl_{r_key}_{i}")
 
         # 2. Tipe Graduasi (RHK 4 - Excel)
         elif "RHK 4" in rhk:
-            st.info("Mode Graduasi: Upload Excel Data KPM.")
+            st.info("ℹ️ **Mode Graduasi:** Upload Excel Data KPM untuk membuat banyak laporan sekaligus.")
             upl = st.file_uploader("Upload Excel (.xlsx)", type=['xlsx'])
             
             if upl:
-                df = pd.read_excel(upl)
-                if "Nama" not in df.columns:
-                    st.error("Excel harus punya kolom 'Nama'")
-                else:
-                    selected_kpms = st.multiselect("Pilih KPM yang Graduasi:", df['Nama'].tolist())
-                    
-                    if selected_kpms:
-                        photos = st.file_uploader("Foto Dokumentasi Umum", accept_multiple_files=True)
-                        if st.button("🚀 Generate Laporan Graduasi"):
-                            if not photos: st.error("Foto wajib!"); st.stop()
-                            
-                            res = []
-                            p_data = [io.BytesIO(f.getvalue()) for f in photos]
-                            bar = st.progress(0)
-                            
-                            for i, nama_kpm in enumerate(selected_kpms):
-                                row = df[df['Nama'] == nama_kpm].iloc[0].to_dict()
-                                json_data = generate_isi_laporan(rhk, f"Graduasi KPM {nama_kpm}", 1, nama_kpm, meta['bulan'], lokasi, f"Graduasi Mandiri a.n {nama_kpm}")
+                try:
+                    df = pd.read_excel(upl)
+                    if "Nama" not in df.columns:
+                        st.error("⚠️ Excel harus punya kolom bernama 'Nama'")
+                    else:
+                        selected_kpms = st.multiselect("Pilih KPM yang Graduasi:", df['Nama'].tolist())
+                        
+                        if selected_kpms:
+                            st.write("Upload 1 set foto untuk semua laporan ini:")
+                            photos = st.file_uploader("Foto Dokumentasi", accept_multiple_files=True, key="grad_foto")
+                            if st.button("🚀 Generate Laporan Graduasi", type="primary"):
+                                if not photos: st.error("Foto wajib!"); st.stop()
                                 
-                                if json_data:
-                                    word = create_word_doc(json_data, meta, p_data, st.session_state['kop_bytes'], st.session_state['ttd_bytes'], kpm_data=row)
-                                    res.append({"judul": nama_kpm, "file": word})
-                                bar.progress((i+1)/len(selected_kpms))
-                            
-                            st.session_state['rhk4_graduasi_results'] = res
-                            st.rerun()
+                                res = []
+                                p_data = [io.BytesIO(f.getvalue()) for f in photos]
+                                bar = st.progress(0)
+                                
+                                for i, nama_kpm in enumerate(selected_kpms):
+                                    try:
+                                        row = df[df['Nama'] == nama_kpm].iloc[0].to_dict()
+                                        json_data = generate_isi_laporan(rhk, f"Graduasi KPM {nama_kpm}", 1, nama_kpm, meta['bulan'], lokasi, f"Graduasi Mandiri a.n {nama_kpm}")
+                                        
+                                        if json_data:
+                                            word = create_word_doc(json_data, meta, p_data, st.session_state['kop_bytes'], st.session_state['ttd_bytes'], f"Graduasi {nama_kpm}", kpm_data=row)
+                                            res.append({"judul": nama_kpm, "file": word})
+                                    except: pass
+                                    bar.progress((i+1)/len(selected_kpms))
+                                
+                                st.session_state['rhk4_graduasi_results'] = res
+                                st.rerun()
+                except Exception as e:
+                    st.error(f"Gagal baca file: {e}")
 
             res = st.session_state.get('rhk4_graduasi_results')
             if res:
+                st.write("---")
+                st.write("### Hasil Graduasi")
                 for i, r in enumerate(res):
-                    st.download_button(f"Download {r['judul']}", r['file'], f"Graduasi_{r['judul']}.docx", key=f"dl_g_{i}")
+                    st.download_button(f"📥 {r['judul']}", r['file'], f"Graduasi_{r['judul']}.docx", key=f"dl_g_{i}")
 
         # 3. Tipe Standar (RHK 1, 5, 6, 7, 9)
         else:
-            # Gunakan FORM untuk mencegah reload saat mengetik
             with st.form("std_form"):
+                # DI SINI JUGA LETAK ERROR SEBELUMNYA (Aman karena validasi)
                 judul_keg = st.selectbox("Pilih Kegiatan", CONFIG_LAPORAN[rhk])
-                ket_add = st.text_area("Keterangan Tambahan", height=100)
+                ket_add = st.text_area("Keterangan Tambahan", height=100, placeholder="Ceritakan sedikit tentang kegiatan ini...")
                 fotos = st.file_uploader("Upload Foto", accept_multiple_files=True)
                 
-                # TOMBOL SUBMIT DI DALAM FORM SANGAT STABIL
-                generate_btn = st.form_submit_button("🚀 BUAT LAPORAN SEKARANG")
+                generate_btn = st.form_submit_button("🚀 BUAT LAPORAN SEKARANG", type="primary", use_container_width=True)
             
             if generate_btn:
                 if not fotos:
                     st.error("❌ Mohon upload foto dokumentasi.")
                 else:
-                    with st.status("Sedang bekerja...", expanded=True) as status:
-                        st.write("🧠 Mengontak Gemini AI...")
+                    with st.status("🤖 AI sedang bekerja...", expanded=True) as status:
+                        st.write("Menganalisis data...")
                         json_data = generate_isi_laporan(rhk, judul_keg, u_kpm, "Peserta", meta['bulan'], lokasi, ket_add)
                         
                         if json_data:
-                            st.write("📄 Menyusun Dokumen Word...")
+                            st.write("Menyusun dokumen...")
                             p_data = [io.BytesIO(f.getvalue()) for f in fotos]
-                            # Auto Save
                             [auto_save_photo_local(f, rhk, meta['bulan']) for f in fotos]
                             
                             word_file = create_word_doc(json_data, meta, p_data, st.session_state['kop_bytes'], st.session_state['ttd_bytes'], ket_add)
@@ -532,20 +554,12 @@ if check_password():
                                 "name": f"Laporan_{rhk[:5]}_{meta['bulan']}",
                                 "file": word_file
                             }
-                            status.update(label="✅ Selesai!", state="complete")
+                            status.update(label="✅ Selesai!", state="complete", expanded=False)
+                            st.rerun()
                         else:
-                            status.update(label="❌ Gagal!", state="error")
+                            status.update(label="❌ Gagal menghubungi AI", state="error")
             
-            # Tampilkan tombol download di luar form
             if st.session_state.get('generated_file_data'):
                 f = st.session_state['generated_file_data']
-                st.success("Laporan Siap!")
-                st.download_button("📥 Download Word (.docx)", f['file'], f"{f['name']}.docx", type="primary")
-
-    # ==========================================
-    # 8. ROUTING UTAMA
-    # ==========================================
-    if st.session_state['page'] == 'home':
-        show_dashboard()
-    else:
-        show_detail()
+                st.success("✅ Laporan Siap Unduh!")
+                st.download_button("📥 Download Word (.docx)", f['file'], f"{f['name']}.docx", type="primary", use_container_width=True)
