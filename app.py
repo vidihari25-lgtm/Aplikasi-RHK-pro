@@ -23,28 +23,51 @@ st.set_page_config(page_title="Aplikasi RHK PKH Pro 2.0", layout="wide")
 # ==========================================
 # 2. DEFINISI CONFIG (DITARUH DI ATAS AGAR AMAN)
 # ==========================================
+# UPDATE: Disesuaikan dengan Tabel Indikator Kinerja Individu & Pilihan Laporan Harian
 CONFIG_LAPORAN = {
-    "RHK 1 – Laporan Penyaluran bansos": ["Laporan Penyaluran Bantuan Sosial"],
-    
-    "RHK 2 – Laporan pertemuan P2K2": [
-        "Modul Ekonomi 1: Mengelola Keuangan Keluarga", "Modul Ekonomi 2: Cermat Meminjam", "Modul Ekonomi 3: Memulai Usaha",
-        "Modul Kesehatan 1: Gizi Ibu Hamil", "Modul Kesehatan 2: Gizi Balita", "Modul Kesehatan 3: Kesakitan Anak",
-        "Modul Pengasuhan 1: Menjadi Orangtua Baik", "Modul Perlindungan 1: Anti Kekerasan Anak"
+    "RHK 1 – Laporan Penyaluran bansos": [
+        "Melakukan edukasi dan sosialisasi pencairan secara tunai dan non tunai",
+        "Melaksanakan Supervisi Permasalahan Bantuan Sosial",
+        "Melaksanakan Monitoring/Pemantauan Penyaluran Bantuan Sosial",
+        "Melaksanakan Penelitian penyaluran bantuan Sosial"
     ],
     
-    "RHK 3 – Laporan Verifikasi Komitmen data KPM": ["Verifikasi Pendidikan (Sekolah)", "Verifikasi Kesehatan (Posyandu)", "Verifikasi Kesos"],
+    "RHK 2 – Laporan pertemuan P2K2": [
+        "Melaksanakan Pertemuan Peningkatan Kemampuan Keluarga (P2K2)"
+    ],
     
-    "RHK 4 – Rekapitulasi Data KPM graduasi": ["Laporan Graduasi Mandiri"], 
+    "RHK 3 – Laporan Verifikasi Komitmen dan Pendampingan KPM": [
+        "Melaksanakan Verifikasi Komitmen Pendidikan,Kesehatan dan Kesejahteraan Sosial",
+        "Melakukan pendampingan, mediasi, dan fasilitasi kepada KPM PKH dalam proses perubahan perilaku, pola pikir yang mandiri dan produktif"
+    ],
     
-    "RHK 5 – Laporan Data Verifikasi, Validasi": ["Laporan Pemutakhiran Data KPM"],
+    "RHK 4 – Rekapitulasi Data KPM graduasi": [
+        "Melakukan usulan KPM Graduasi mandiri dan Pemberdayaan PPSE"
+    ],
     
-    "RHK 6 – Persentase penyelesaian laporan kasus adaptif": ["Laporan Penanganan Kasus (Case Management)"],
+    "RHK 5 – Laporan Data Verifikasi, Validasi dan pemutakhiran data KPM": [
+        "Melaksanakan Pemutakhiran Data",
+        "Melaksanakan proses bisnis PKH yang meliputi verifikasi validasi calon penerima bantuan sosial"
+    ],
     
-    "RHK 7 – Laporan Bulanan ASN PPPK": ["Laporan Kinerja Bulanan ASN PPPK"],
+    "RHK 6 – persentase penyelesaian laporan kasus adaptif": [
+        "Melaksanakan Respon Kasus/Pengaduan/kebencanaan/Kerentanan"
+    ],
     
-    "RHK 8 – Laporan pelaksana Tugas direktif": ["Tugas Direktif Pimpinan"],
+    "RHK 7 – Laporan Bulanan ASN PPPK": [
+        "Membuat laporan bulanan pelaksanaan PKH dan laporan lainnya."
+    ],
     
-    "RHK 9 – Presentase Penyelesaian Penugasan Direktif": ["Evaluasi Penyelesaian Tugas"]
+    "RHK 8 – laporan pelaksana Tugas direktif": [
+        "Melaksanakan Tindak Lanjut Hasil Pemeriksaan (TLHP)",
+        "Melakukan sosialisasi kebijakan dan bisnis proses PKH kepada aparat pemerintah tingkat kecamatan, desa/ kelurahan, KPM PKH, dan masyarakat umum secara berkala melalui Pertemuan atau media sosial dll",
+        "Mengikuti Rapat Koordinasi, Sosialisasi Kebijakan Proses Bisnis PKH dan Penguatan Kapasitas SDM.",
+        "Tugas Lainnya (Penugasan lainnya program Kementrian Sosial)"
+    ],
+    
+    "RHK 9 – Presentase Penyelesaian Penugasan Direktif Pimpinan": [
+        "Berperan aktif dalam memanfaatkan, menggunakan, melibatkan dan menyebarkan Media Sosial untuk menyampaikan semua program di Kementerian Sosial"
+    ]
 }
 
 # --- PERBAIKAN VITAL: RESET SESI OTOMATIS (SELF-HEALING) ---
@@ -443,4 +466,3 @@ if check_password():
 
     if st.session_state['page'] == 'home': show_dashboard()
     else: show_detail()
-
