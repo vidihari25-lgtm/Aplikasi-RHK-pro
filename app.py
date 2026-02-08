@@ -51,47 +51,35 @@ DAFTAR_USER = {"admin": "admin123", "pendamping": "pkh2026", "user": "user"}
 try: GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
 except: st.error("Setting Secrets GOOGLE_API_KEY belum ada!"); st.stop()
 
-# --- SETUP AI (Gemini 2.0 Flash) ---
+# --- SETUP AI (KEMBALI KE 1.5 FLASH AGAR LEBIH STABIL ISINYA) ---
 try:
     genai.configure(api_key=GOOGLE_API_KEY)
-    model = genai.GenerativeModel('gemini-2.0-flash', generation_config={"response_mime_type": "application/json"})
+    # Kita gunakan 1.5 Flash karena lebih patuh pada instruksi panjang
+    model = genai.GenerativeModel('gemini-1.5-flash', generation_config={"response_mime_type": "application/json"})
 except Exception as e: st.error(f"Error AI: {e}")
 
 # ==========================================
 # 3. FUNGSI GOOGLE DRIVE (CLOUD STORAGE)
 # ==========================================
 def get_drive_service():
-    """Koneksi aman ke Google Drive via Streamlit Secrets"""
     try:
-        # Cek apakah secrets gcp ada
-        if "gcp_service_account" not in st.secrets:
-            return None
-        
+        if "gcp_service_account" not in st.secrets: return None
         creds_dict = dict(st.secrets["gcp_service_account"])
-        creds = service_account.Credentials.from_service_account_info(
-            creds_dict, scopes=["https://www.googleapis.com/auth/drive"]
-        )
+        creds = service_account.Credentials.from_service_account_info(creds_dict, scopes=["https://www.googleapis.com/auth/drive"])
         return build('drive', 'v3', credentials=creds)
-    except Exception as e:
-        return None
+    except: return None
 
 def upload_to_drive(file_obj, filename, mime_type='application/octet-stream'):
-    """Upload file BytesIO ke Google Drive Folder"""
     service = get_drive_service()
-    if not service: return None # Skip jika belum disetting
-    
+    if not service: return None 
     try:
         folder_id = st.secrets["drive"]["folder_id"]
         file_metadata = {'name': filename, 'parents': [folder_id]}
-        
-        file_obj.seek(0) # Reset pointer
+        file_obj.seek(0)
         media = MediaIoBaseUpload(file_obj, mimetype=mime_type, resumable=True)
-        
         file = service.files().create(body=file_metadata, media_body=media, fields='id').execute()
         return file.get('id')
-    except Exception as e:
-        st.error(f"Gagal Upload Cloud: {e}")
-        return None
+    except: return None
 
 # ==========================================
 # 4. LOGIN & DATABASE LOKAL
@@ -126,7 +114,7 @@ if check_password():
     if not st.session_state['bln_val']: st.session_state['bln_val'] = "JANUARI"
     if not st.session_state['th_val']: st.session_state['th_val'] = "2026"
     
-    # --- DB LOKAL (User Settings) ---
+    # --- DB LOKAL ---
     def init_db():
         conn = sqlite3.connect('rhk_settings.db')
         c = conn.cursor()
@@ -151,12 +139,37 @@ if check_password():
             return output
         except: uploaded_file.seek(0); return uploaded_file
 
+    # --- PERBAIKAN: PROMPT DIKEMBALIKAN KE VERSI LENGKAP AGAR TIDAK KOSONG ---
     def generate_ai(topik, detail, lokasi, bulan, info):
-        prompt = f"Role: Pendamping PKH. JSON Laporan.\nTopik: {topik}\nKegiatan: {detail}\nLokasi: {lokasi}\nBulan: {bulan}\nInfo: {info}\nOutput JSON: {{'gambaran_umum':'...','maksud_tujuan':'...','kegiatan':['...'],'hasil':['...'],'penutup':'...'}}"
+        prompt = f"""
+        Bertindaklah sebagai Pendamping Sosial PKH Profesional. 
+        Buatlah isi Laporan Kegiatan yang *Sangat Detail, Panjang, dan Manusiawi* dalam format JSON.
+        
+        DATA KEGIATAN:
+        - RHK: {topik}
+        - Nama Kegiatan: {detail}
+        - Lokasi & Waktu: {lokasi}, Periode {bulan}
+        - KETERANGAN TAMBAHAN USER (Wajib dimasukkan ke narasi): {info}
+
+        WAJIB GUNAKAN STRUKTUR JSON DI BAWAH INI (Isi dengan teks paragraf panjang):
+        {{
+            "gambaran_umum": "Jelaskan latar belakang wilayah, kondisi KPM, dan urgensi kegiatan ini dalam 2-3 kalimat panjang.",
+            "maksud_tujuan": "Jelaskan tujuan kegiatan secara strategis dan teknis.",
+            "ruang_lingkup": "Jelaskan siapa sasarannya (KPM), metode pelaksanaan, dan pihak yang terlibat.",
+            "dasar_hukum": ["Permensos No 1 Tahun 2018 tentang PKH", "Petunjuk Teknis PKH Tahun {datetime.now().year}"],
+            "kegiatan": ["Jelaskan tahap persiapan...", "Jelaskan tahap pelaksanaan inti secara detail...", "Jelaskan tahap evaluasi..."],
+            "hasil": ["Sebutkan hasil konkret 1...", "Sebutkan perubahan perilaku/kondisi KPM...", "Dokumentasi terlengkap..."],
+            "kesimpulan": "Berikan kesimpulan menyeluruh tentang keberhasilan kegiatan ini.",
+            "saran": ["Saran untuk perbaikan ke depan...", "Saran untuk pihak terkait..."],
+            "penutup": "Demikian laporan ini dibuat dengan sebenar-benarnya sebagai bentuk pertanggungjawaban pelaksanaan tugas."
+        }}
+        """
         try:
             res = model.generate_content(prompt)
             return json.loads(res.text.replace("```json","").replace("```","").strip())
-        except: return None
+        except Exception as e:
+            # Jika error, return None agar terdeteksi
+            return None
 
     def create_doc(data, meta, imgs, kop, ttd, extra_info=None):
         if not data: return None
@@ -169,13 +182,29 @@ if check_password():
         
         p = doc.add_paragraph(f"\nLAPORAN\nTENTANG\n{meta['judul']}\n{meta['bulan']}"); p.alignment=1; p.runs[0].bold=True
         
-        doc.add_paragraph("A. Pendahuluan", style='Heading 1'); doc.add_paragraph(str(data.get('gambaran_umum','-')), style='Body Text')
-        doc.add_paragraph("B. Pelaksanaan", style='Heading 1')
-        if extra_info: doc.add_paragraph(f"Info: {extra_info}", style='Quote')
+        doc.add_paragraph("A. Pendahuluan", style='Heading 1')
+        doc.add_paragraph(str(data.get('gambaran_umum','-')), style='Body Text')
+        
+        doc.add_paragraph("B. Maksud dan Tujuan", style='Heading 1')
+        doc.add_paragraph(str(data.get('maksud_tujuan','-')), style='Body Text')
+
+        doc.add_paragraph("C. Ruang Lingkup", style='Heading 1')
+        doc.add_paragraph(str(data.get('ruang_lingkup','-')), style='Body Text')
+
+        doc.add_paragraph("D. Pelaksanaan Kegiatan", style='Heading 1')
+        if extra_info: doc.add_paragraph(f"Catatan Khusus: {extra_info}", style='Quote')
         for k in data.get('kegiatan', []): doc.add_paragraph(str(k), style='List Bullet')
-        doc.add_paragraph("C. Hasil", style='Heading 1')
+        
+        doc.add_paragraph("E. Hasil yang Dicapai", style='Heading 1')
         for h in data.get('hasil', []): doc.add_paragraph(str(h), style='List Bullet')
-        doc.add_paragraph("D. Penutup", style='Heading 1'); doc.add_paragraph(str(data.get('penutup','-')), style='Body Text')
+        
+        doc.add_paragraph("F. Kesimpulan & Saran", style='Heading 1')
+        doc.add_paragraph(str(data.get('kesimpulan','-')), style='Body Text')
+        doc.add_paragraph("Saran:", style='Body Text')
+        for s in data.get('saran', []): doc.add_paragraph(str(s), style='List Bullet')
+
+        doc.add_paragraph("G. Penutup", style='Heading 1')
+        doc.add_paragraph(str(data.get('penutup','-')), style='Body Text')
         
         doc.add_paragraph("\n\n")
         t = doc.add_table(1,2); t.autofit=False; t.columns[0].width=Inches(3); t.columns[1].width=Inches(3)
@@ -197,9 +226,8 @@ if check_password():
     # 5. UI UTAMA & LOGIKA TANGGAL
     # ==========================================
     
-    # --- LOGIKA TANGGAL OTOMATIS (Update Sesuai Permintaan) ---
+    # --- LOGIKA TANGGAL SESUAI PERMINTAAN (FEB=28, LAIN=30) ---
     def update_tanggal():
-        # Februari = 28, Lainnya = 30
         bulan = st.session_state.bln_val
         tahun = st.session_state.th_val
         hari = "28" if bulan == "FEBRUARI" else "30"
@@ -331,6 +359,8 @@ if check_password():
                                     fid = upload_to_drive(w, f"LAPORAN_{rhk[:5]}_{meta['bulan']}.docx", 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
                                     st.session_state['generated_file_data'] = {'name':keg, 'file':w, 'drive_id':fid}
                                     st.rerun()
+                            else:
+                                st.error("Gagal membuat laporan (AI tidak merespon/Format Salah). Coba lagi.")
             
             if st.session_state.get('generated_file_data'):
                 d = st.session_state['generated_file_data']
