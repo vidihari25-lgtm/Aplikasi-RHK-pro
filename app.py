@@ -479,23 +479,93 @@ if check_password():
         meta = {'bulan': f"{st.session_state.bln_val} {st.session_state.th_val}", 'nama': u_nama, 'nip': u_nip, 'kab': u_kab, 'kec': u_kec, 'kel': u_kel, 'tgl': st.session_state.tgl_val, 'judul': rhk.split('–')[-1].upper()}
         lokasi = f"{u_kel}, {u_kec}, {u_kab}"
         
-        # LOGIKA TAMPILAN
+                # LOGIKA TAMPILAN
         if "RHK 2" in rhk or "RHK 3" in rhk or "RHK 8" in rhk:
             q_key = 'rhk2_queue' if "RHK 2" in rhk else ('rhk3_queue' if "RHK 3" in rhk else 'rhk8_queue')
             r_key = q_key.replace('queue', 'results')
             st.info("💡 **Mode Antrian:** Masukkan kegiatan satu per satu, lalu klik 'Generate Semua'.")
             
-            with st.form("queue_form", clear_on_submit=True):
-                try: kegiatan = st.selectbox("Sub-Kegiatan", CONFIG_LAPORAN[rhk])
-                except: kegiatan = "Kegiatan Umum"
-                ket_q = st.text_input("Keterangan", placeholder="Detail lokasi/peserta...")
-                fotos = st.file_uploader("Foto", accept_multiple_files=True, type=['jpg','png'])
-                if st.form_submit_button("➕ Tambah"):
-                    if not fotos: st.error("❌ Foto wajib!")
-                    else:
-                        st.session_state[q_key].append({"kegiatan": kegiatan, "ket": ket_q, "fotos": [io.BytesIO(f.getvalue()) for f in fotos]})
-                        st.success("Masuk antrian!"); st.rerun()
+            # --- UPDATE: DATA MODUL P2K2 ---
+            DATA_P2K2 = {
+                "Modul Ekonomi": [
+                    "1. Mengelola Keuangan Keluarga",
+                    "2. Cermat Meminjam dan Menabung",
+                    "3. Memulai Usaha"
+                ],
+                "Modul Kesehatan dan Gizi": [
+                    "1. Pentingnya Gizi dan Layanan Ibu Hamil",
+                    "2. Pentingnya Gizi Untuk Ibu Menyusui dan Balita",
+                    "3. Kesakitan pada Anak dan Kesehatan Lingkungan"
+                ],
+                "Modul Kesejahteraan": [
+                    "1. Pelayanan bagi Penyandang Disabilitas Berat",
+                    "2. Pentingnya Kesejahteraan Lanjut Usia"
+                ],
+                "Modul Pengasuhan dan Pendidikan": [
+                    "1. Menjadi Orang Tua yang Lebih Baik",
+                    "2. Memahami Perilaku Anak",
+                    "3. Memahami Cara Anak Usia Dini Belajar",
+                    "4. Membantu Anak Sukses di Sekolah"
+                ],
+                "Modul Perlindungan Anak": [
+                    "1. Pencegahan Kekerasan Terhadap Anak",
+                    "2. Penelantaran dan Eksploitasi Anak"
+                ],
+                "Modul Stunting": [
+                    "1. Pencegahan dan Penanganan Stunting",
+                    "2. Dukungan Pemenuhan Kesejahteraan Bayi Baru Lahir dan Ibu Menyusui"
+                ]
+            }
+
+            # --- KHUSUS RHK 2 (MODUL P2K2) ---
+            if "RHK 2" in rhk:
+                # Selectbox ditaruh DI LUAR form agar interaktif (Modul -> Sesi berubah otomatis)
+                kegiatan = st.selectbox("Sub-Kegiatan", CONFIG_LAPORAN[rhk])
+                
+                col_m1, col_m2 = st.columns(2)
+                with col_m1:
+                    # Pilih Modul
+                    pilih_modul = st.selectbox("Pilih Modul P2K2", list(DATA_P2K2.keys()), key="p2k2_modul_sel")
+                with col_m2:
+                    # Pilih Sesi (Otomatis berubah sesuai Modul yang dipilih)
+                    opsi_sesi = DATA_P2K2.get(pilih_modul, ["-"])
+                    pilih_sesi = st.selectbox("Pilih Sesi", opsi_sesi, key="p2k2_sesi_sel")
+
+                # Form Sisanya (Keterangan & Foto)
+                with st.form("queue_form_rhk2", clear_on_submit=True):
+                    ket_q = st.text_input("Keterangan Tambahan", placeholder="Nama Kelompok / Lokasi / Jumlah Peserta...")
+                    fotos = st.file_uploader("Foto Kegiatan", accept_multiple_files=True, type=['jpg','png'])
+                    
+                    if st.form_submit_button("➕ Tambah ke Antrian"):
+                        if not fotos:
+                            st.error("❌ Foto wajib diupload!")
+                        else:
+                            # Gabungkan Modul & Sesi ke dalam judul/keterangan agar masuk laporan
+                            final_judul = f"{kegiatan} - {pilih_modul}"
+                            final_ket = f"Materi: {pilih_sesi}. Keterangan: {ket_q}"
+                            
+                            st.session_state[q_key].append({
+                                "kegiatan": final_judul, 
+                                "ket": final_ket, 
+                                "fotos": [io.BytesIO(f.getvalue()) for f in fotos]
+                            })
+                            st.success(f"Berhasil: {pilih_sesi} ditambahkan!")
+                            st.rerun()
+
+            # --- UNTUK RHK 3 DAN RHK 8 (FORMAT LAMA) ---
+            else:
+                with st.form("queue_form", clear_on_submit=True):
+                    try: kegiatan = st.selectbox("Sub-Kegiatan", CONFIG_LAPORAN[rhk])
+                    except: kegiatan = "Kegiatan Umum"
+                    ket_q = st.text_input("Keterangan", placeholder="Detail lokasi/peserta...")
+                    fotos = st.file_uploader("Foto", accept_multiple_files=True, type=['jpg','png'])
+                    if st.form_submit_button("➕ Tambah"):
+                        if not fotos: st.error("❌ Foto wajib!")
+                        else:
+                            st.session_state[q_key].append({"kegiatan": kegiatan, "ket": ket_q, "fotos": [io.BytesIO(f.getvalue()) for f in fotos]})
+                            st.success("Masuk antrian!"); st.rerun()
             
+            # --- TAMPILAN ANTRIAN (SAMA UNTUK SEMUA) ---
             queue = st.session_state[q_key]
             if queue:
                 st.write(f"**Antrian ({len(queue)} Item):**")
@@ -503,6 +573,7 @@ if check_password():
                 if st.button("🚀 GENERATE SEMUA", type="primary"):
                     results = []; bar = st.progress(0)
                     for i, item in enumerate(queue):
+                        # Panggil AI generate
                         jd = generate_isi_laporan(rhk, item['kegiatan'], u_kpm, "Peserta", meta['bulan'], lokasi, item['ket'])
                         if jd: 
                             w = create_word_doc(jd, meta, item['fotos'], st.session_state['kop_bytes'], st.session_state['ttd_bytes'], item['ket'])
@@ -582,3 +653,4 @@ if check_password():
 
     if st.session_state['page'] == 'home': show_dashboard()
     else: show_detail()
+
