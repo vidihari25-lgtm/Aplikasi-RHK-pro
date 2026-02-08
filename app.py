@@ -41,7 +41,7 @@ except KeyError:
     st.error("🚨 Key 'GOOGLE_API_KEY' tidak ditemukan di secrets.toml.")
     st.stop()
 
-# --- KONFIGURASI AI CERDAS (GEMINI 1.5 FLASH) ---
+# --- KONFIGURASI AI CERDAS (GEMINI 2.0 FLASH) ---
 try:
     genai.configure(api_key=GOOGLE_API_KEY)
     generation_config = {
@@ -52,7 +52,7 @@ try:
         "response_mime_type": "application/json",
     }
     model = genai.GenerativeModel(
-        model_name="gemini-1.5-flash",
+        model_name="gemini-2.0-flash",
         generation_config=generation_config,
     )
 except Exception as e:
@@ -596,3 +596,4 @@ if check_password():
         show_dashboard()
     else:
         show_detail()
+
