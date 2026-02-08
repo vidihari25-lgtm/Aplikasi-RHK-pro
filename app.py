@@ -81,7 +81,21 @@ if 'selected_rhk' in st.session_state:
 def init_db():
     conn = sqlite3.connect('rhk_pro_fixed.db')
     c = conn.cursor()
+    # Tabel User Settings
     c.execute('''CREATE TABLE IF NOT EXISTS user_settings (id INTEGER PRIMARY KEY, nama TEXT, nip TEXT, kpm INTEGER, prov TEXT, kab TEXT, kec TEXT, kel TEXT)''')
+    
+    # [BARU] Tabel Riwayat Laporan
+    c.execute('''CREATE TABLE IF NOT EXISTS riwayat_laporan (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        tanggal TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        bulan TEXT,
+        tahun TEXT,
+        jenis_rhk TEXT,
+        judul_kegiatan TEXT,
+        file_docx BLOB,
+        file_pdf BLOB
+    )''')
+    
     c.execute('SELECT count(*) FROM user_settings')
     if c.fetchone()[0] == 0:
         c.execute('INSERT INTO user_settings (id, nama, nip, kpm, prov, kab, kec, kel) VALUES (1, ?, ?, ?, ?, ?, ?, ?)', ("Pendamping PKH", "19xxxx", 100, "Provinsi", "Kabupaten", "Kecamatan", "Kelurahan"))
@@ -95,6 +109,54 @@ def get_user_settings():
 def save_user_settings(nama, nip, kpm, prov, kab, kec, kel):
     conn = sqlite3.connect('rhk_pro_fixed.db'); c = conn.cursor()
     c.execute('''UPDATE user_settings SET nama=?, nip=?, kpm=?, prov=?, kab=?, kec=?, kel=? WHERE id=1''', (nama, nip, kpm, prov, kab, kec, kel))
+    conn.commit(); conn.close()
+
+# [BARU] FUNGSI DATABASE RIWAYAT
+def save_to_history(bulan, tahun, rhk, judul, docx_io, pdf_io):
+    conn = sqlite3.connect('rhk_pro_fixed.db')
+    c = conn.cursor()
+    
+    # Pastikan file pointer di awal dan ambil bytes
+    docx_io.seek(0)
+    docx_blob = docx_io.getvalue()
+    
+    # PDF di kode ini kadang sudah bytes, kadang BytesIO. Kita handle keduanya.
+    if isinstance(pdf_io, bytes):
+        pdf_blob = pdf_io
+    else:
+        pdf_io.seek(0)
+        pdf_blob = pdf_io.getvalue()
+    
+    c.execute('''INSERT INTO riwayat_laporan (bulan, tahun, jenis_rhk, judul_kegiatan, file_docx, file_pdf)
+                 VALUES (?, ?, ?, ?, ?, ?)''', 
+              (bulan, tahun, rhk, judul, docx_blob, pdf_blob))
+    conn.commit(); conn.close()
+
+def get_history_by_filter(bulan, tahun):
+    conn = sqlite3.connect('rhk_pro_fixed.db')
+    conn.row_factory = sqlite3.Row 
+    c = conn.cursor()
+    if bulan == "SEMUA" and tahun == "SEMUA":
+        c.execute("SELECT id, tanggal, bulan, tahun, jenis_rhk, judul_kegiatan FROM riwayat_laporan ORDER BY id DESC")
+    elif bulan == "SEMUA":
+        c.execute("SELECT id, tanggal, bulan, tahun, jenis_rhk, judul_kegiatan FROM riwayat_laporan WHERE tahun=? ORDER BY id DESC", (tahun,))
+    else:
+        c.execute("SELECT id, tanggal, bulan, tahun, jenis_rhk, judul_kegiatan FROM riwayat_laporan WHERE bulan=? AND tahun=? ORDER BY id DESC", (bulan, tahun))
+    data = c.fetchall(); conn.close(); return data
+
+def get_file_from_history(id_laporan, tipe='docx'):
+    conn = sqlite3.connect('rhk_pro_fixed.db')
+    c = conn.cursor()
+    col = 'file_docx' if tipe == 'docx' else 'file_pdf'
+    c.execute(f"SELECT {col}, judul_kegiatan FROM riwayat_laporan WHERE id=?", (id_laporan,))
+    data = c.fetchone(); conn.close()
+    if data: return data[0], data[1]
+    return None, None
+
+def delete_history_item(id_laporan):
+    conn = sqlite3.connect('rhk_pro_fixed.db')
+    c = conn.cursor()
+    c.execute("DELETE FROM riwayat_laporan WHERE id=?", (id_laporan,))
     conn.commit(); conn.close()
 
 def compress_image(uploaded_file, quality=60, max_width=600):
@@ -439,6 +501,10 @@ if check_password():
         st.selectbox("Tahun", ["2026", "2027"], key="th_val", on_change=update_tanggal)
         st.text_input("Tanggal Surat", key="tgl_val")
         st.markdown("---")
+        if st.button("🗄️ ARSIP LAPORAN", use_container_width=True, type="secondary"):
+             st.session_state['page'] = 'history'
+             st.rerun()
+        st.markdown("---")
         st.file_uploader("Kop Surat (JPG/PNG)", type=['png','jpg'], key="kop_up")
         if st.session_state.get('kop_up'): st.session_state['kop_bytes'] = st.session_state['kop_up'].getvalue()
         
@@ -453,6 +519,73 @@ if check_password():
                 st.markdown(f"""<div style="background-color:#f0f2f6; padding:15px; border-radius:10px; margin-bottom:10px; border:1px solid #d1d5db;"><b>{rhk.split('–')[0]}</b><br><small>{rhk.split('–')[-1]}</small></div>""", unsafe_allow_html=True)
                 if st.button(f"Buka {rhk.split('–')[0]}", key=f"nav_{i}", use_container_width=True):
                     st.session_state['selected_rhk'] = rhk; st.session_state['page'] = 'detail'; st.rerun()
+
+        # [BARU] Tombol Shortcut Arsip di Dashboard
+        st.markdown("---")
+        if st.button("🗄️ Buka Arsip Digital (History Laporan)", use_container_width=True):
+            st.session_state['page'] = 'history'
+            st.rerun()
+
+    # [BARU] HALAMAN ARSIP
+    def show_history_page():
+        st.title("🗄️ Arsip Digital Laporan")
+        
+        # 1. Filter
+        col1, col2, col3 = st.columns([2, 2, 4])
+        with col1:
+            f_bulan = st.selectbox("Filter Bulan", ["SEMUA", "JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI", "JULI", "AGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DESEMBER"])
+        with col2:
+            f_tahun = st.selectbox("Filter Tahun", ["SEMUA", "2026", "2027"])
+        with col3:
+            if st.button("⬅️ Kembali ke Dashboard", use_container_width=True):
+                st.session_state['page'] = 'home'
+                st.rerun()
+
+        # 2. Ambil Data
+        data = get_history_by_filter(f_bulan, f_tahun)
+        
+        if not data:
+            st.info("Belum ada riwayat laporan yang tersimpan.")
+            return
+
+        # 3. Tampilkan Data
+        st.markdown(f"**Ditemukan: {len(data)} Dokumen**")
+        
+        for row in data:
+            with st.expander(f"{row['jenis_rhk']} - {row['judul_kegiatan']} ({row['bulan']} {row['tahun']})"):
+                c1, c2, c3, c4 = st.columns([2, 2, 2, 1])
+                
+                with c1:
+                    st.caption(f"📅 Dibuat: {row['tanggal']}")
+                
+                with c2:
+                    if st.button("📄 Word", key=f"wd_{row['id']}"):
+                        blob, title = get_file_from_history(row['id'], 'docx')
+                        st.download_button(
+                            label="⬇️ Klik Download Docx",
+                            data=blob,
+                            file_name=f"{title}.docx",
+                            mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            key=f"dwd_real_{row['id']}"
+                        )
+
+                with c3:
+                    if st.button("📕 PDF", key=f"pdf_{row['id']}"):
+                        blob, title = get_file_from_history(row['id'], 'pdf')
+                        st.download_button(
+                            label="⬇️ Klik Download PDF",
+                            data=blob,
+                            file_name=f"{title}.pdf",
+                            mime="application/pdf",
+                            key=f"dpdf_real_{row['id']}"
+                        )
+
+                with c4:
+                    if st.button("🗑️", key=f"del_h_{row['id']}", help="Hapus Permanen"):
+                        delete_history_item(row['id'])
+                        st.success("Terhapus")
+                        time.sleep(0.5)
+                        st.rerun()
 
     def show_detail():
         rhk = st.session_state.get('selected_rhk')
@@ -528,7 +661,7 @@ if check_password():
                         if st.button("🗑️ Hapus", key=f"del_{q_key}_{i}"):
                             st.session_state[q_key].pop(i); st.rerun()
 
-                if st.button("🚀 GENERATE SEMUA", type="primary"):
+                if st.button("🚀 GENERATE SEMUA & SIMPAN ARSIP", type="primary"):
                     results = []; bar = st.progress(0)
                     with st.spinner("Sedang menghubungi AI dan menyusun dokumen..."):
                         for i, item in enumerate(queue):
@@ -536,9 +669,12 @@ if check_password():
                             if jd: 
                                 w = create_word_doc(jd, meta, item['fotos'], st.session_state['kop_bytes'], st.session_state['ttd_bytes'], item['ket'])
                                 p = create_pdf_doc(jd, meta, item['fotos'], st.session_state['kop_bytes'], st.session_state['ttd_bytes'], item['ket'])
-                                if w: results.append({"judul": item['kegiatan'], "file": w, "file_pdf": p})
+                                if w: 
+                                    results.append({"judul": item['kegiatan'], "file": w, "file_pdf": p})
+                                    # [BARU] AUTO SAVE KE DB
+                                    save_to_history(meta['bulan'], st.session_state.th_val, rhk.split('–')[0], item['kegiatan'], w, p)
                             bar.progress((i + 1) / len(queue))
-                    st.session_state[r_key] = results; st.success("Selesai!"); st.rerun()
+                    st.session_state[r_key] = results; st.success("Selesai! Laporan telah tersimpan di Arsip."); st.rerun()
             
             if st.session_state.get(r_key):
                 st.write("### 📥 Download Hasil")
@@ -562,7 +698,7 @@ if check_password():
                     sel_kpm = st.multiselect("Pilih KPM", df['Nama'].tolist()) if 'Nama' in df.columns else []
                     if sel_kpm:
                         photos = st.file_uploader("Foto", accept_multiple_files=True)
-                        if st.button("🚀 Generate") and photos:
+                        if st.button("🚀 Generate & Simpan") and photos:
                             res = []; p_data = [io.BytesIO(f.getvalue()) for f in photos]; bar = st.progress(0)
                             with st.spinner("Memproses data graduasi..."):
                                 for i, nm in enumerate(sel_kpm):
@@ -571,9 +707,12 @@ if check_password():
                                     if jd:
                                         w = create_word_doc(jd, meta, p_data, st.session_state['kop_bytes'], st.session_state['ttd_bytes'], f"Graduasi {nm}", row)
                                         p = create_pdf_doc(jd, meta, p_data, st.session_state['kop_bytes'], st.session_state['ttd_bytes'], f"Graduasi {nm}", row)
-                                        if w: res.append({"judul": nm, "file": w, "file_pdf": p})
+                                        if w: 
+                                            res.append({"judul": nm, "file": w, "file_pdf": p})
+                                            # [BARU] AUTO SAVE
+                                            save_to_history(meta['bulan'], st.session_state.th_val, rhk.split('–')[0], nm, w, p)
                                     bar.progress((i+1)/len(sel_kpm))
-                            st.session_state['rhk4_graduasi_results'] = res; st.rerun()
+                            st.session_state['rhk4_graduasi_results'] = res; st.success("Selesai! Laporan tersimpan di Arsip."); st.rerun()
                 except: st.error("Format Excel Salah")
             
             if st.session_state.get('rhk4_graduasi_results'):
@@ -583,7 +722,7 @@ if check_password():
                     with c2: 
                         if r.get('file_pdf'): st.download_button(f"📥 PDF: {r['judul']}", r['file_pdf'], f"Graduasi_{r['judul']}.pdf", key=f"dgp{i}", use_container_width=True)
 
-        # --- UPDATE BARU: RHK 5 (VERIVALI DENGAN PILIHAN APLIKASI) ---
+        # --- RHK 5 (VERIVALI DENGAN PILIHAN APLIKASI) ---
         elif "RHK 5" in rhk:
             st.info("ℹ️ **Mode Verivali:** Pilih aplikasi yang digunakan untuk verifikasi.")
             
@@ -605,9 +744,7 @@ if check_password():
                     if not fotos:
                         st.error("Foto wajib!")
                     else:
-                        # Gabungkan Aplikasi ke dalam context AI
                         full_context = f"Menggunakan {aplikasi}. {ket}"
-                        
                         with st.spinner("Mengolah data Verivali..."):
                             jd = generate_isi_laporan(rhk, kegiatan, u_kpm, "KPM", meta['bulan'], lokasi, full_context)
                             if jd:
@@ -616,10 +753,13 @@ if check_password():
                                 p = create_pdf_doc(jd, meta, imgs_data, st.session_state['kop_bytes'], st.session_state['ttd_bytes'], full_context)
                                 
                                 st.session_state['generated_file_data'] = {"name": f"Laporan {kegiatan}", "file": w, "file_pdf": p}
+                                
+                                # [BARU] AUTO SAVE
+                                save_to_history(meta['bulan'], st.session_state.th_val, rhk.split('–')[0], kegiatan, w, p)
+                                st.success("Selesai! Laporan tersimpan di Arsip.")
                                 st.rerun()
                             else: st.error("Gagal koneksi AI, coba lagi.")
             
-            # (Reuse Download Logic)
             if st.session_state.get('generated_file_data'):
                 f = st.session_state['generated_file_data']
                 st.success("Selesai!")
@@ -646,6 +786,9 @@ if check_password():
                                 p = create_pdf_doc(jd, meta, imgs_data, st.session_state['kop_bytes'], st.session_state['ttd_bytes'], ka)
                                 if w:
                                     st.session_state['generated_file_data'] = {"name": f"Laporan {jk}", "file": w, "file_pdf": p}
+                                    # [BARU] AUTO SAVE
+                                    save_to_history(meta['bulan'], st.session_state.th_val, rhk.split('–')[0], jk, w, p)
+                                    st.success("Selesai! Laporan tersimpan di Arsip.")
                                     st.rerun()
                             else: st.error("Gagal koneksi AI, coba lagi.")
             
@@ -657,5 +800,7 @@ if check_password():
                 with c2: 
                     if f.get('file_pdf'): st.download_button("📕 Download PDF", f['file_pdf'], f"{f['name']}.pdf", type="secondary", use_container_width=True)
 
+    # ROUTING HALAMAN
     if st.session_state['page'] == 'home': show_dashboard()
+    elif st.session_state['page'] == 'history': show_history_page()
     else: show_detail()
