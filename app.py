@@ -16,6 +16,7 @@ import json
 import re
 
 # --- LIBRARY GOOGLE DRIVE ---
+# Pastikan library ini terinstall: pip install google-api-python-client google-auth
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
@@ -26,7 +27,7 @@ from googleapiclient.http import MediaIoBaseUpload
 st.set_page_config(page_title="Aplikasi RHK PKH Pro Cloud", layout="wide")
 
 # ==========================================
-# 2. DEFINISI CONFIG RHK
+# 2. DEFINISI CONFIG (DITARUH DI ATAS UNTUK VALIDASI)
 # ==========================================
 CONFIG_LAPORAN = {
     "RHK 1 – Laporan Penyaluran bansos": ["Laporan Penyaluran Bantuan Sosial"],
@@ -40,26 +41,28 @@ CONFIG_LAPORAN = {
     "RHK 9 – Evaluasi Tugas Direktif": ["Evaluasi Penyelesaian Tugas"]
 }
 
-# --- SELF HEALING SESSION (Anti KeyError) ---
+# --- FITUR ANTI-CRASH (SELF HEALING) ---
+# Kode ini akan otomatis mereset sesi jika mendeteksi data lama yang bikin error
 if 'selected_rhk' in st.session_state and st.session_state['selected_rhk']:
     if st.session_state['selected_rhk'] not in CONFIG_LAPORAN:
-        st.session_state.clear(); st.rerun()
+        st.session_state.clear()
+        st.rerun()
 
 # --- SECURITY ---
 DAFTAR_USER = {"admin": "admin123", "pendamping": "pkh2026", "user": "user"}
 
 try: GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
-except: st.error("Setting Secrets GOOGLE_API_KEY belum ada!"); st.stop()
+except: st.error("🚨 Setting Secrets GOOGLE_API_KEY belum ada!"); st.stop()
 
-# --- SETUP AI (KEMBALI KE 1.5 FLASH AGAR LEBIH STABIL ISINYA) ---
+# --- SETUP AI (Versi Stabil untuk Konten Panjang) ---
 try:
     genai.configure(api_key=GOOGLE_API_KEY)
-    # Kita gunakan 1.5 Flash karena lebih patuh pada instruksi panjang
+    # Menggunakan Gemini 1.5 Flash karena lebih stabil untuk instruksi JSON panjang daripada 2.0
     model = genai.GenerativeModel('gemini-1.5-flash', generation_config={"response_mime_type": "application/json"})
-except Exception as e: st.error(f"Error AI: {e}")
+except Exception as e: st.error(f"Error Konfigurasi AI: {e}")
 
 # ==========================================
-# 3. FUNGSI GOOGLE DRIVE (CLOUD STORAGE)
+# 3. FUNGSI GOOGLE DRIVE
 # ==========================================
 def get_drive_service():
     try:
@@ -82,7 +85,7 @@ def upload_to_drive(file_obj, filename, mime_type='application/octet-stream'):
     except: return None
 
 # ==========================================
-# 4. LOGIN & DATABASE LOKAL
+# 4. LOGIN & DATABASE
 # ==========================================
 def check_password():
     if st.session_state.get("password_correct", False): return True
@@ -116,7 +119,7 @@ if check_password():
     
     # --- DB LOKAL ---
     def init_db():
-        conn = sqlite3.connect('rhk_settings.db')
+        conn = sqlite3.connect('rhk_settings_new.db')
         c = conn.cursor()
         c.execute('''CREATE TABLE IF NOT EXISTS user (id INTEGER PRIMARY KEY, nama TEXT, nip TEXT, kpm INTEGER, prov TEXT, kab TEXT, kec TEXT, kel TEXT)''')
         c.execute('SELECT count(*) FROM user'); 
@@ -124,9 +127,9 @@ if check_password():
         conn.commit(); conn.close()
     
     def get_set(): 
-        conn = sqlite3.connect('rhk_settings.db'); c=conn.cursor(); c.execute('SELECT * FROM user WHERE id=1'); d=c.fetchone(); conn.close(); return d
+        conn = sqlite3.connect('rhk_settings_new.db'); c=conn.cursor(); c.execute('SELECT * FROM user WHERE id=1'); d=c.fetchone(); conn.close(); return d
     def save_set(n,i,k,p,kb,kc,kl):
-        conn = sqlite3.connect('rhk_settings.db'); c=conn.cursor(); c.execute('UPDATE user SET nama=?, nip=?, kpm=?, prov=?, kab=?, kec=?, kel=? WHERE id=1', (n,i,k,p,kb,kc,kl)); conn.commit(); conn.close()
+        conn = sqlite3.connect('rhk_settings_new.db'); c=conn.cursor(); c.execute('UPDATE user SET nama=?, nip=?, kpm=?, prov=?, kab=?, kec=?, kel=? WHERE id=1', (n,i,k,p,kb,kc,kl)); conn.commit(); conn.close()
     
     init_db()
 
@@ -139,40 +142,44 @@ if check_password():
             return output
         except: uploaded_file.seek(0); return uploaded_file
 
-    # --- PERBAIKAN: PROMPT DIKEMBALIKAN KE VERSI LENGKAP AGAR TIDAK KOSONG ---
+    # --- GENERATOR AI DENGAN PROMPT DETAIL (AGAR ISI TIDAK KOSONG) ---
     def generate_ai(topik, detail, lokasi, bulan, info):
         prompt = f"""
-        Bertindaklah sebagai Pendamping Sosial PKH Profesional. 
-        Buatlah isi Laporan Kegiatan yang *Sangat Detail, Panjang, dan Manusiawi* dalam format JSON.
+        Bertindaklah sebagai Pendamping Sosial PKH Profesional.
+        Buatlah isi laporan yang **PANJANG, DETAIL, dan NARATIF** (bukan poin-poin singkat).
         
-        DATA KEGIATAN:
-        - RHK: {topik}
-        - Nama Kegiatan: {detail}
-        - Lokasi & Waktu: {lokasi}, Periode {bulan}
-        - KETERANGAN TAMBAHAN USER (Wajib dimasukkan ke narasi): {info}
+        DATA:
+        - Topik: {topik}
+        - Kegiatan: {detail}
+        - Lokasi: {lokasi}
+        - Bulan: {bulan}
+        - Info Tambahan: {info}
 
-        WAJIB GUNAKAN STRUKTUR JSON DI BAWAH INI (Isi dengan teks paragraf panjang):
+        Output WAJIB JSON dengan struktur ini (isi teks paragraf panjang):
         {{
-            "gambaran_umum": "Jelaskan latar belakang wilayah, kondisi KPM, dan urgensi kegiatan ini dalam 2-3 kalimat panjang.",
-            "maksud_tujuan": "Jelaskan tujuan kegiatan secara strategis dan teknis.",
-            "ruang_lingkup": "Jelaskan siapa sasarannya (KPM), metode pelaksanaan, dan pihak yang terlibat.",
-            "dasar_hukum": ["Permensos No 1 Tahun 2018 tentang PKH", "Petunjuk Teknis PKH Tahun {datetime.now().year}"],
-            "kegiatan": ["Jelaskan tahap persiapan...", "Jelaskan tahap pelaksanaan inti secara detail...", "Jelaskan tahap evaluasi..."],
-            "hasil": ["Sebutkan hasil konkret 1...", "Sebutkan perubahan perilaku/kondisi KPM...", "Dokumentasi terlengkap..."],
-            "kesimpulan": "Berikan kesimpulan menyeluruh tentang keberhasilan kegiatan ini.",
-            "saran": ["Saran untuk perbaikan ke depan...", "Saran untuk pihak terkait..."],
-            "penutup": "Demikian laporan ini dibuat dengan sebenar-benarnya sebagai bentuk pertanggungjawaban pelaksanaan tugas."
+            "gambaran_umum": "Jelaskan kondisi wilayah, peserta, dan latar belakang kegiatan secara mendalam.",
+            "maksud_tujuan": "Jelaskan tujuan strategis dan teknis kegiatan ini.",
+            "ruang_lingkup": "Jelaskan sasaran peserta, metode, dan pihak yang terlibat.",
+            "kegiatan": ["Paragraf detil tentang persiapan...", "Paragraf detil tentang proses pelaksanaan...", "Paragraf detil tentang sesi tanya jawab/diskusi..."],
+            "hasil": ["Paragraf tentang hasil konkret 1...", "Paragraf tentang perubahan perilaku peserta..."],
+            "kesimpulan": "Kesimpulan menyeluruh tentang efektivitas kegiatan.",
+            "saran": ["Saran konstruktif untuk perbaikan masa depan."],
+            "penutup": "Kalimat penutup formal laporan kedinasan."
         }}
         """
         try:
             res = model.generate_content(prompt)
-            return json.loads(res.text.replace("```json","").replace("```","").strip())
+            # Membersihkan response jika ada markdown
+            clean_text = res.text.replace("```json","").replace("```","").strip()
+            return json.loads(clean_text)
         except Exception as e:
-            # Jika error, return None agar terdeteksi
-            return None
+            return None # Return None agar bisa dihandle error-nya
 
+    # --- PEMBUAT DOCX DENGAN ANTI-ERROR ---
     def create_doc(data, meta, imgs, kop, ttd, extra_info=None):
+        # CEK: Jika data kosong (AI Gagal), jangan lanjut biar gak error
         if not data: return None
+
         doc = Document()
         for s in doc.sections: s.top_margin=Cm(2); s.bottom_margin=Cm(2); s.left_margin=Cm(2.5); s.right_margin=Cm(2.5)
         
@@ -182,29 +189,29 @@ if check_password():
         
         p = doc.add_paragraph(f"\nLAPORAN\nTENTANG\n{meta['judul']}\n{meta['bulan']}"); p.alignment=1; p.runs[0].bold=True
         
-        doc.add_paragraph("A. Pendahuluan", style='Heading 1')
-        doc.add_paragraph(str(data.get('gambaran_umum','-')), style='Body Text')
-        
-        doc.add_paragraph("B. Maksud dan Tujuan", style='Heading 1')
-        doc.add_paragraph(str(data.get('maksud_tujuan','-')), style='Body Text')
+        # Helper untuk tambah section aman (handling None)
+        def add_sec(judul, isi):
+            doc.add_paragraph(judul, style='Heading 1')
+            if not isi: isi = "-"
+            doc.add_paragraph(str(isi), style='Body Text')
 
-        doc.add_paragraph("C. Ruang Lingkup", style='Heading 1')
-        doc.add_paragraph(str(data.get('ruang_lingkup','-')), style='Body Text')
+        add_sec("A. Pendahuluan", data.get('gambaran_umum'))
+        add_sec("B. Maksud dan Tujuan", data.get('maksud_tujuan'))
+        add_sec("C. Ruang Lingkup", data.get('ruang_lingkup'))
 
         doc.add_paragraph("D. Pelaksanaan Kegiatan", style='Heading 1')
-        if extra_info: doc.add_paragraph(f"Catatan Khusus: {extra_info}", style='Quote')
+        if extra_info: doc.add_paragraph(f"Catatan: {extra_info}", style='Quote')
         for k in data.get('kegiatan', []): doc.add_paragraph(str(k), style='List Bullet')
         
         doc.add_paragraph("E. Hasil yang Dicapai", style='Heading 1')
         for h in data.get('hasil', []): doc.add_paragraph(str(h), style='List Bullet')
         
-        doc.add_paragraph("F. Kesimpulan & Saran", style='Heading 1')
-        doc.add_paragraph(str(data.get('kesimpulan','-')), style='Body Text')
+        add_sec("F. Kesimpulan", data.get('kesimpulan'))
+        
         doc.add_paragraph("Saran:", style='Body Text')
         for s in data.get('saran', []): doc.add_paragraph(str(s), style='List Bullet')
 
-        doc.add_paragraph("G. Penutup", style='Heading 1')
-        doc.add_paragraph(str(data.get('penutup','-')), style='Body Text')
+        add_sec("G. Penutup", data.get('penutup'))
         
         doc.add_paragraph("\n\n")
         t = doc.add_table(1,2); t.autofit=False; t.columns[0].width=Inches(3); t.columns[1].width=Inches(3)
@@ -226,7 +233,7 @@ if check_password():
     # 5. UI UTAMA & LOGIKA TANGGAL
     # ==========================================
     
-    # --- LOGIKA TANGGAL SESUAI PERMINTAAN (FEB=28, LAIN=30) ---
+    # --- LOGIKA TANGGAL (Feb=28, Lain=30) ---
     def update_tanggal():
         bulan = st.session_state.bln_val
         tahun = st.session_state.th_val
@@ -234,9 +241,9 @@ if check_password():
         st.session_state.tgl_val = f"{hari} {bulan.title()} {tahun}"
 
     # --- SIDEBAR ---
-    u_data = get_set() # id, nama, nip, kpm, prov, kab, kec, kel
+    u_data = get_set()
     with st.sidebar:
-        st.write("☁️ **Status: Terhubung Cloud**" if "gcp_service_account" in st.secrets else "⚠️ **Offline / Lokal**")
+        st.write("☁️ **Status: Cloud**" if "gcp_service_account" in st.secrets else "⚠️ **Lokal**")
         
         with st.expander("👤 Profil Pendamping"):
             with st.form("prof"):
@@ -248,9 +255,7 @@ if check_password():
         st.divider()
         st.selectbox("Bulan", ["JANUARI","FEBRUARI","MARET","APRIL","MEI","JUNI","JULI","AGUSTUS","SEPTEMBER","OKTOBER","NOVEMBER","DESEMBER"], key="bln_val", on_change=update_tanggal)
         st.selectbox("Tahun", ["2026","2027"], key="th_val", on_change=update_tanggal)
-        # Jika session tgl_val belum ada, inisialisasi default
         if not st.session_state.tgl_val: update_tanggal()
-        
         st.text_input("Tgl Surat", key="tgl_val")
         
         st.divider()
@@ -268,6 +273,7 @@ if check_password():
 
     def show_detail():
         rhk = st.session_state.get('selected_rhk')
+        # Double check agar tidak error
         if rhk not in CONFIG_LAPORAN: st.session_state['page']='home'; st.rerun(); return
 
         c1,c2 = st.columns([1,5])
@@ -280,12 +286,12 @@ if check_password():
         # --- LOGIKA RHK ---
         if "RHK 4" in rhk: # Graduasi
             st.info("🎓 Mode Graduasi: Upload Excel Data KPM.")
-            # Template Button
+            # Template
             df_tmpl = pd.DataFrame({"Nama": ["Budi"], "NIK": ["123"], "Alamat": ["Desa A"], "Kategori": ["PKH"], "Status": ["Graduasi"], "Alasan": ["Mampu"]})
             buf = io.BytesIO(); df_tmpl.to_excel(buf, index=False); buf.seek(0)
             st.download_button("📥 Template Excel", buf, "Template.xlsx")
             
-            upl = st.file_uploader("Excel KPM (.xlsx)", type=['xlsx'])
+            upl = st.file_uploader("Excel KPM", type=['xlsx'])
             if upl:
                 try:
                     df = pd.read_excel(upl); names = df['Nama'].tolist() if 'Nama' in df.columns else []
@@ -298,12 +304,11 @@ if check_password():
                             if jd:
                                 w = create_doc(jd, meta, p_data, st.session_state.get('kop_bytes'), st.session_state.get('ttd_bytes'), f"KPM: {nm}")
                                 if w:
-                                    # AUTO UPLOAD
-                                    file_id = upload_to_drive(w, f"GRADUASI_{nm}_{meta['bulan']}.docx", 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
-                                    res.append({'judul': nm, 'file': w, 'drive_id': file_id})
+                                    fid = upload_to_drive(w, f"GRADUASI_{nm}_{meta['bulan']}.docx", 'application/vnd.openxmlformats-officedocument.wordprocessingml.document')
+                                    res.append({'judul': nm, 'file': w, 'drive_id': fid})
                             bar.progress((idx+1)/len(sel))
-                        st.session_state['rhk4_graduasi_results'] = res; st.success("Selesai! File tersimpan di Google Drive.")
-                except: st.error("Format Excel salah (harus ada kolom 'Nama')")
+                        st.session_state['rhk4_graduasi_results'] = res; st.success("Selesai! File tersimpan di Drive.")
+                except: st.error("Format Excel salah.")
             
             if st.session_state.get('rhk4_graduasi_results'):
                 for r in st.session_state['rhk4_graduasi_results']:
@@ -360,7 +365,7 @@ if check_password():
                                     st.session_state['generated_file_data'] = {'name':keg, 'file':w, 'drive_id':fid}
                                     st.rerun()
                             else:
-                                st.error("Gagal membuat laporan (AI tidak merespon/Format Salah). Coba lagi.")
+                                st.error("⚠️ AI Gagal membuat konten. Silakan coba lagi atau cek koneksi.")
             
             if st.session_state.get('generated_file_data'):
                 d = st.session_state['generated_file_data']
