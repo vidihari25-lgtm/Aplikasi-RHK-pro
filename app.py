@@ -40,7 +40,7 @@ CONFIG_LAPORAN = {
     "RHK 9 – Evaluasi Tugas Direktif": ["Evaluasi Penyelesaian Tugas"]
 }
 
-# --- SELF HEALING SESSION ---
+# --- SELF HEALING SESSION (Anti KeyError) ---
 if 'selected_rhk' in st.session_state and st.session_state['selected_rhk']:
     if st.session_state['selected_rhk'] not in CONFIG_LAPORAN:
         st.session_state.clear(); st.rerun()
@@ -51,7 +51,7 @@ DAFTAR_USER = {"admin": "admin123", "pendamping": "pkh2026", "user": "user"}
 try: GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
 except: st.error("Setting Secrets GOOGLE_API_KEY belum ada!"); st.stop()
 
-# --- SETUP AI ---
+# --- SETUP AI (Gemini 2.0 Flash) ---
 try:
     genai.configure(api_key=GOOGLE_API_KEY)
     model = genai.GenerativeModel('gemini-2.0-flash', generation_config={"response_mime_type": "application/json"})
@@ -73,7 +73,6 @@ def get_drive_service():
         )
         return build('drive', 'v3', credentials=creds)
     except Exception as e:
-        print(f"Drive Error: {e}") # Log ke console server
         return None
 
 def upload_to_drive(file_obj, filename, mime_type='application/octet-stream'):
@@ -195,8 +194,17 @@ if check_password():
         bio = io.BytesIO(); doc.save(bio); return bio
 
     # ==========================================
-    # 5. UI UTAMA
+    # 5. UI UTAMA & LOGIKA TANGGAL
     # ==========================================
+    
+    # --- LOGIKA TANGGAL OTOMATIS (Update Sesuai Permintaan) ---
+    def update_tanggal():
+        # Februari = 28, Lainnya = 30
+        bulan = st.session_state.bln_val
+        tahun = st.session_state.th_val
+        hari = "28" if bulan == "FEBRUARI" else "30"
+        st.session_state.tgl_val = f"{hari} {bulan.title()} {tahun}"
+
     # --- SIDEBAR ---
     u_data = get_set() # id, nama, nip, kpm, prov, kab, kec, kel
     with st.sidebar:
@@ -210,9 +218,12 @@ if check_password():
                 if st.form_submit_button("Simpan"): save_set(n,i,k,p,kb,kc,kl); st.rerun()
         
         st.divider()
-        st.selectbox("Bulan", ["JANUARI","FEBRUARI","MARET","APRIL","MEI","JUNI","JULI","AGUSTUS","SEPTEMBER","OKTOBER","NOVEMBER","DESEMBER"], key="bln_val")
-        st.selectbox("Tahun", ["2026","2027"], key="th_val")
-        st.text_input("Tgl Surat", value=f"30 {st.session_state.bln_val.title()} {st.session_state.th_val}", key="tgl_val")
+        st.selectbox("Bulan", ["JANUARI","FEBRUARI","MARET","APRIL","MEI","JUNI","JULI","AGUSTUS","SEPTEMBER","OKTOBER","NOVEMBER","DESEMBER"], key="bln_val", on_change=update_tanggal)
+        st.selectbox("Tahun", ["2026","2027"], key="th_val", on_change=update_tanggal)
+        # Jika session tgl_val belum ada, inisialisasi default
+        if not st.session_state.tgl_val: update_tanggal()
+        
+        st.text_input("Tgl Surat", key="tgl_val")
         
         st.divider()
         kop = st.file_uploader("Kop Surat", type=['jpg','png']); ttd = st.file_uploader("TTD", type=['jpg','png'])
@@ -241,6 +252,11 @@ if check_password():
         # --- LOGIKA RHK ---
         if "RHK 4" in rhk: # Graduasi
             st.info("🎓 Mode Graduasi: Upload Excel Data KPM.")
+            # Template Button
+            df_tmpl = pd.DataFrame({"Nama": ["Budi"], "NIK": ["123"], "Alamat": ["Desa A"], "Kategori": ["PKH"], "Status": ["Graduasi"], "Alasan": ["Mampu"]})
+            buf = io.BytesIO(); df_tmpl.to_excel(buf, index=False); buf.seek(0)
+            st.download_button("📥 Template Excel", buf, "Template.xlsx")
+            
             upl = st.file_uploader("Excel KPM (.xlsx)", type=['xlsx'])
             if upl:
                 try:
@@ -270,7 +286,9 @@ if check_password():
         elif "RHK 2" in rhk or "RHK 3" in rhk or "RHK 8" in rhk: # Antrian
             st.info("📋 Mode Antrian: Tambah kegiatan, lalu Generate sekaligus.")
             with st.form("q"):
-                keg = st.selectbox("Kegiatan", CONFIG_LAPORAN[rhk]); ket = st.text_input("Ket")
+                try: keg = st.selectbox("Kegiatan", CONFIG_LAPORAN[rhk])
+                except: keg = "Kegiatan Umum"
+                ket = st.text_input("Ket")
                 ft = st.file_uploader("Foto", accept_multiple_files=True)
                 if st.form_submit_button("Tambah"):
                     st.session_state['rhk2_queue'].append({'keg':keg, 'ket':ket, 'ft':[io.BytesIO(f.getvalue()) for f in ft]})
@@ -298,7 +316,9 @@ if check_password():
 
         else: # Standar
             with st.form("std"):
-                keg = st.selectbox("Kegiatan", CONFIG_LAPORAN[rhk]); ket = st.text_area("Ket")
+                try: keg = st.selectbox("Kegiatan", CONFIG_LAPORAN[rhk])
+                except: keg = "Kegiatan Umum"
+                ket = st.text_area("Ket")
                 ft = st.file_uploader("Foto", accept_multiple_files=True)
                 if st.form_submit_button("🚀 Buat Laporan"):
                     if not ft: st.error("Foto wajib!")
