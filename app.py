@@ -23,7 +23,6 @@ st.set_page_config(page_title="Aplikasi RHK PKH Pro 2.0", layout="wide")
 # ==========================================
 # 2. DEFINISI CONFIG (DITARUH DI ATAS AGAR AMAN)
 # ==========================================
-# UPDATE: Disesuaikan dengan Tabel Indikator Kinerja Individu & Pilihan Laporan Harian
 CONFIG_LAPORAN = {
     "RHK 1 – Laporan Penyaluran bansos": [
         "Melakukan edukasi dan sosialisasi pencairan secara tunai dan non tunai",
@@ -33,33 +32,7 @@ CONFIG_LAPORAN = {
     ],
     
     "RHK 2 – Laporan pertemuan P2K2": [
-        # --- DATA DARI GAMBAR ---
-        "Modul Pengasuhan 1: Menjadi Orangtua Lebih Baik",
-        "Modul Pengasuhan 2: Perilaku Anak",
-        "Modul Pengasuhan 3: Cara Anak Usia Dini Belajar",
-        "Modul Pengasuhan 4: Membantu Anak Sukses Sekolah",
-        "Modul Ekonomi 1: Mengelola Keuangan Keluarga",
-        "Modul Ekonomi 2: Cermat Meminjam Dan Menabung",
-        "Modul Ekonomi 3: Memulai Usaha",
-        "Modul Kesehatan 1: Pentingnya Gizi Ibu Hamil",
-        "Modul Kesehatan 2: Pentingnya Gizi Ibu Menyusui & Balita",
-        "Modul Kesehatan 3: Kesakitan Anak & Kesling",
-        "Modul Kesehatan 4: Permainan Anak",
-        "Modul Kesejahteraan 1: Disabilitas Berat",
-        "Modul Kesejahteraan 2: Kesejahteraan Lanjut Usia",
-        "Modul Perlindungan 1: Pencegahan Kekerasan Anak",
-        "Modul Perlindungan 2: Penelantaran & Eksploitasi Anak",
-        # --- TAMBAHAN SESI 1 s/d 10 ---
-        "Sesi 1 P2K2",
-        "Sesi 2 P2K2",
-        "Sesi 3 P2K2",
-        "Sesi 4 P2K2",
-        "Sesi 5 P2K2",
-        "Sesi 6 P2K2",
-        "Sesi 7 P2K2",
-        "Sesi 8 P2K2",
-        "Sesi 9 P2K2",
-        "Sesi 10 P2K2"
+        "Melaksanakan Pertemuan Peningkatan Kemampuan Keluarga (P2K2)"
     ],
     
     "RHK 3 – Laporan Verifikasi Komitmen dan Pendampingan KPM": [
@@ -97,11 +70,9 @@ CONFIG_LAPORAN = {
 }
 
 # --- PERBAIKAN VITAL: RESET SESI OTOMATIS (SELF-HEALING) ---
-# Kode ini mendeteksi jika browser menyimpan nama RHK lama yang tidak ada di config baru
 if 'selected_rhk' in st.session_state:
     if st.session_state['selected_rhk'] is not None:
         if st.session_state['selected_rhk'] not in CONFIG_LAPORAN:
-            # Jika RHK di memori tidak dikenali, hapus semua memori
             st.session_state.clear()
             st.rerun()
 
@@ -187,7 +158,7 @@ if check_password():
 
     # --- Database Sederhana ---
     def init_db():
-        conn = sqlite3.connect('rhk_pro_fixed.db') # Ganti nama DB biar fresh
+        conn = sqlite3.connect('rhk_pro_fixed.db') 
         c = conn.cursor()
         c.execute('''CREATE TABLE IF NOT EXISTS user_settings (id INTEGER PRIMARY KEY, nama TEXT, nip TEXT, kpm INTEGER, prov TEXT, kab TEXT, kec TEXT, kel TEXT)''')
         c.execute('SELECT count(*) FROM user_settings')
@@ -236,10 +207,10 @@ if check_password():
             return True
         except: return False
 
-    # --- TEXT & PDF TOOLS (DIPERBAIKI UNTUK ATTRIBUTE ERROR) ---
+    # --- TEXT & PDF TOOLS ---
     def clean_text_for_pdf(text):
-        if text is None: return "-" # Handle None biar gak error
-        text = str(text) # Paksa jadi string
+        if text is None: return "-" 
+        text = str(text) 
         text = text.replace('\u2013', '-').replace('\u201c', '"').replace('\u201d', '"')
         return text.encode('latin-1', 'replace').decode('latin-1')
 
@@ -267,17 +238,15 @@ if check_password():
         """
         try:
             response = model.generate_content(prompt)
-            # Pembersihan Markdown jika AI nakal
             text = response.text.replace("```json", "").replace("```", "").strip()
             return json.loads(text)
         except Exception as e:
-            return None # Return None biar nanti dihandle
+            return None 
 
     # ==========================================
     # 6. PEMBUAT DOKUMEN (Word & PDF)
     # ==========================================
     def create_word_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
-        # --- FIX VITAL: CEK DATA KOSONG ---
         if data is None: return None
 
         doc = Document()
@@ -294,7 +263,7 @@ if check_password():
         
         def add_section(title, content, is_list=False):
             doc.add_paragraph(title, style='Heading 1')
-            if content is None: content = "-" # Handle None
+            if content is None: content = "-"
             if is_list:
                 if isinstance(content, list):
                     for item in content: doc.add_paragraph(str(item), style='List Bullet')
@@ -343,7 +312,7 @@ if check_password():
         
         bio = io.BytesIO(); doc.save(bio); return bio
 
-    # --- FUNGSI BARU: CREATE PDF DOC ---
+    # --- FUNGSI PDF (PERBAIKAN KOP & TTD) ---
     def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
         if data is None: return None
         
@@ -352,18 +321,21 @@ if check_password():
         pdf.add_page()
         pdf.set_margins(25, 20, 25)
 
-        # 1. KOP SURAT
+        # 1. KOP SURAT (Fix: Flush & Use .png)
         if kop:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
                 tmp.write(kop)
+                tmp.flush() # Pastikan data tertulis ke disk
                 tmp_path = tmp.name
             try:
                 # Adjust width and position similar to Word
                 pdf.image(tmp_path, x=10, y=10, w=190)
-                pdf.ln(35) # Spasi setelah kop
-            except: pass
+                pdf.ln(35) 
+            except Exception as e: 
+                pass # print(f"Kop error: {e}")
             finally:
-                if os.path.exists(tmp_path): os.remove(tmp_path)
+                try: os.remove(tmp_path)
+                except: pass
         else:
             pdf.ln(10)
 
@@ -419,50 +391,51 @@ if check_password():
         add_section_pdf("D. Hasil", data.get('hasil'), True)
         add_section_pdf("E. Penutup", data.get('penutup'))
 
-        # 4. TANDA TANGAN
+        # 4. TANDA TANGAN (Fix: Flush & Use .png)
         pdf.ln(10)
         pdf.set_font("Arial", "", 11)
-        # Posisi TTD di Kanan
         x_right = 110
         pdf.set_x(x_right)
         pdf.multi_cell(80, 6, f"{clean_text_for_pdf(meta['kab'])}, {clean_text_for_pdf(meta['tgl'])}\nPengelola Layanan Operasional", align='C')
         
         if ttd:
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_ttd:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_ttd:
                 tmp_ttd.write(ttd)
+                tmp_ttd.flush() # Pastikan data tertulis ke disk
                 ttd_path = tmp_ttd.name
             try:
                 pdf.image(ttd_path, x=x_right+15, y=pdf.get_y(), w=50)
-                pdf.ln(25) # Space for image height
-            except: pdf.ln(25)
+                pdf.ln(25) 
+            except Exception as e: 
+                pdf.ln(25)
             finally:
-                if os.path.exists(ttd_path): os.remove(ttd_path)
+                try: os.remove(ttd_path)
+                except: pass
         else:
             pdf.ln(25)
         
         pdf.set_x(x_right)
         pdf.multi_cell(80, 6, f"\n{clean_text_for_pdf(meta['nama'])}\nNIP. {clean_text_for_pdf(meta['nip'])}", align='C')
 
-        # 5. DOKUMENTASI
+        # 5. DOKUMENTASI (Fix: Flush & Use .jpg for photos)
         if imgs:
             pdf.add_page()
             pdf.set_font("Arial", "B", 12)
             pdf.cell(0, 10, "DOKUMENTASI", ln=True, align='C')
             for img_bytes in imgs:
-                # Compress image first to avoid huge PDF
                 compressed = compress_image(img_bytes)
                 with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_img:
                     tmp_img.write(compressed.getvalue())
+                    tmp_img.flush() # Pastikan data tertulis
                     img_path = tmp_img.name
                 try:
-                    # Centered Image
                     pdf.image(img_path, x=35, w=140) 
                     pdf.ln(5)
                 except: pass
                 finally:
-                    if os.path.exists(img_path): os.remove(img_path)
+                    try: os.remove(img_path)
+                    except: pass
 
-        # Return Bytes
         return pdf.output(dest='S').encode('latin-1')
 
     # ==========================================
@@ -506,7 +479,6 @@ if check_password():
 
     def show_detail():
         rhk = st.session_state.get('selected_rhk')
-        # --- DOUBLE CHECK: Mencegah KeyError di tengah jalan ---
         if rhk not in CONFIG_LAPORAN:
             st.warning("🔄 Refreshing session..."); st.session_state['page'] = 'home'; st.rerun(); return
 
@@ -517,8 +489,6 @@ if check_password():
         meta = {'bulan': f"{st.session_state.bln_val} {st.session_state.th_val}", 'nama': u_nama, 'nip': u_nip, 'kab': u_kab, 'kec': u_kec, 'kel': u_kel, 'tgl': st.session_state.tgl_val, 'judul': rhk.split('–')[-1].upper()}
         lokasi = f"{u_kel}, {u_kec}, {u_kab}"
         
-        # --- LOGIKA TAMPILAN BERDASARKAN JENIS RHK ---
-        
         # TYPE 1: ANTRIAN (RHK 2, 3, 8)
         if "RHK 2" in rhk or "RHK 3" in rhk or "RHK 8" in rhk:
             q_key = 'rhk2_queue' if "RHK 2" in rhk else ('rhk3_queue' if "RHK 3" in rhk else 'rhk8_queue')
@@ -526,7 +496,6 @@ if check_password():
             st.info("💡 **Mode Antrian:** Masukkan kegiatan satu per satu, lalu klik 'Generate Semua'.")
             
             with st.form("queue_form", clear_on_submit=True):
-                # Try-except di widget untuk keamanan ekstra
                 try: kegiatan = st.selectbox("Sub-Kegiatan", CONFIG_LAPORAN[rhk])
                 except: kegiatan = "Kegiatan Umum"
                 
@@ -548,7 +517,6 @@ if check_password():
                         jd = generate_isi_laporan(rhk, item['kegiatan'], u_kpm, "Peserta", meta['bulan'], lokasi, item['ket'])
                         if jd: 
                             w = create_word_doc(jd, meta, item['fotos'], st.session_state['kop_bytes'], st.session_state['ttd_bytes'], item['ket'])
-                            # TAMBAHAN PDF
                             p = create_pdf_doc(jd, meta, item['fotos'], st.session_state['kop_bytes'], st.session_state['ttd_bytes'], item['ket'])
                             if w: results.append({"judul": item['kegiatan'], "file": w, "file_pdf": p})
                         bar.progress((i + 1) / len(queue))
@@ -567,7 +535,6 @@ if check_password():
         # TYPE 2: GRADUASI (RHK 4)
         elif "RHK 4" in rhk:
             st.info("ℹ️ **Mode Graduasi:** Upload Excel KPM.")
-            # Template Button
             df_tmpl = pd.DataFrame({"Nama": ["Budi"], "NIK": ["123"], "Alamat": ["Desa A"], "Kategori": ["PKH"], "Status": ["Graduasi"], "Alasan": ["Mampu"]})
             buf = io.BytesIO(); df_tmpl.to_excel(buf, index=False); buf.seek(0)
             st.download_button("📥 Template Excel", buf, "Template.xlsx")
@@ -586,7 +553,6 @@ if check_password():
                                 jd = generate_isi_laporan(rhk, f"Graduasi {nm}", 1, nm, meta['bulan'], lokasi, f"Graduasi {nm}")
                                 if jd:
                                     w = create_word_doc(jd, meta, p_data, st.session_state['kop_bytes'], st.session_state['ttd_bytes'], f"Graduasi {nm}", row)
-                                    # TAMBAHAN PDF
                                     p = create_pdf_doc(jd, meta, p_data, st.session_state['kop_bytes'], st.session_state['ttd_bytes'], f"Graduasi {nm}", row)
                                     if w: res.append({"judul": nm, "file": w, "file_pdf": p})
                                 bar.progress((i+1)/len(sel_kpm))
@@ -617,7 +583,6 @@ if check_password():
                             if jd:
                                 imgs_data = [io.BytesIO(f.getvalue()) for f in ft]
                                 w = create_word_doc(jd, meta, imgs_data, st.session_state['kop_bytes'], st.session_state['ttd_bytes'], ka)
-                                # TAMBAHAN PDF
                                 p = create_pdf_doc(jd, meta, imgs_data, st.session_state['kop_bytes'], st.session_state['ttd_bytes'], ka)
                                 if w:
                                     st.session_state['generated_file_data'] = {"name": f"Laporan {jk}", "file": w, "file_pdf": p}
