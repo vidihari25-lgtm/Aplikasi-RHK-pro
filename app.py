@@ -33,7 +33,33 @@ CONFIG_LAPORAN = {
     ],
     
     "RHK 2 – Laporan pertemuan P2K2": [
-        "Melaksanakan Pertemuan Peningkatan Kemampuan Keluarga (P2K2)"
+        # --- DATA DARI GAMBAR ---
+        "Modul Pengasuhan 1: Menjadi Orangtua Lebih Baik",
+        "Modul Pengasuhan 2: Perilaku Anak",
+        "Modul Pengasuhan 3: Cara Anak Usia Dini Belajar",
+        "Modul Pengasuhan 4: Membantu Anak Sukses Sekolah",
+        "Modul Ekonomi 1: Mengelola Keuangan Keluarga",
+        "Modul Ekonomi 2: Cermat Meminjam Dan Menabung",
+        "Modul Ekonomi 3: Memulai Usaha",
+        "Modul Kesehatan 1: Pentingnya Gizi Ibu Hamil",
+        "Modul Kesehatan 2: Pentingnya Gizi Ibu Menyusui & Balita",
+        "Modul Kesehatan 3: Kesakitan Anak & Kesling",
+        "Modul Kesehatan 4: Permainan Anak",
+        "Modul Kesejahteraan 1: Disabilitas Berat",
+        "Modul Kesejahteraan 2: Kesejahteraan Lanjut Usia",
+        "Modul Perlindungan 1: Pencegahan Kekerasan Anak",
+        "Modul Perlindungan 2: Penelantaran & Eksploitasi Anak",
+        # --- TAMBAHAN SESI 1 s/d 10 ---
+        "Sesi 1 P2K2",
+        "Sesi 2 P2K2",
+        "Sesi 3 P2K2",
+        "Sesi 4 P2K2",
+        "Sesi 5 P2K2",
+        "Sesi 6 P2K2",
+        "Sesi 7 P2K2",
+        "Sesi 8 P2K2",
+        "Sesi 9 P2K2",
+        "Sesi 10 P2K2"
     ],
     
     "RHK 3 – Laporan Verifikasi Komitmen dan Pendampingan KPM": [
