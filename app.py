@@ -84,55 +84,37 @@ def upload_to_drive(file_obj, filename, folder_id, mime_type='application/vnd.op
         return None, None
 
 # Fungsi Ambil Data User dari Sheets (Pengganti SQLite)
+# Cari fungsi ini di kode Anda dan TIMPA/GANTI dengan yang ini:
+
 def get_user_settings_sheet():
+    # Data Default (Cadangan jika database error)
+    default_data = ("Pendamping PKH", "19xxxx", 100, "Provinsi", "Kabupaten", "Kecamatan", "Kelurahan")
+    
     try:
         client, _ = init_google_services()
+        if client is None: return default_data # Cek jika koneksi gagal total
+
         sheet_name = st.secrets["general"]["SHEET_NAME"]
         try:
             sh = client.open(sheet_name)
             wks = sh.sheet1
-        except:
-            st.error(f"Spreadsheet '{sheet_name}' tidak ditemukan. Pastikan sudah dibuat dan dishare ke Service Account.")
-            return None
+        except Exception as e:
+            # Jika Sheet tidak ketemu, jangan return None, tapi return Default!
+            st.warning(f"⚠️ Database '{sheet_name}' belum ditemukan/dishare. Menggunakan mode Offline sementara.")
+            return default_data 
         
-        # Ambil data baris ke-2 (Baris 1 Header)
         records = wks.get_all_records()
         if not records:
-            # Jika kosong, return default
-            return ("Pendamping PKH", "19xxxx", 100, "Provinsi", "Kabupaten", "Kecamatan", "Kelurahan")
+            return default_data
         
-        # Ambil data user pertama (bisa dikembangkan multitenancy nanti)
         u = records[0]
-        return (u['nama'], str(u['nip']), u['kpm'], u['prov'], u['kab'], u['kec'], u['kel'])
-    except Exception as e:
-        st.warning(f"Gagal baca Sheets: {e}. Menggunakan data default.")
-        return ("Pendamping PKH", "19xxxx", 100, "Provinsi", "Kabupaten", "Kecamatan", "Kelurahan")
+        # Pastikan urutan return sesuai dengan variabel penerima
+        return (u.get('nama', ''), str(u.get('nip', '')), u.get('kpm', 0), 
+                u.get('prov', ''), u.get('kab', ''), u.get('kec', ''), u.get('kel', ''))
 
-# Fungsi Simpan Data User ke Sheets
-def save_user_settings_sheet(nama, nip, kpm, prov, kab, kec, kel):
-    try:
-        client, _ = init_google_services()
-        sheet_name = st.secrets["general"]["SHEET_NAME"]
-        sh = client.open(sheet_name)
-        wks = sh.sheet1
-        
-        # Update baris ke-2 (anggap user tunggal untuk saat ini)
-        # Pastikan header ada: id, nama, nip, kpm, prov, kab, kec, kel
-        row_data = [1, nama, "'" + str(nip), kpm, prov, kab, kec, kel] # NIP pakai kutip biar jadi string
-        
-        # Cek apakah baris 2 ada isinya
-        if len(wks.get_all_values()) < 2:
-            wks.append_row(row_data)
-        else:
-            # Update range A2:H2
-            cell_list = wks.range('A2:H2')
-            for i, cell in enumerate(cell_list):
-                cell.value = row_data[i]
-            wks.update_cells(cell_list)
-        return True
     except Exception as e:
-        st.error(f"Gagal simpan ke Sheets: {e}")
-        return False
+        st.error(f"Error Database Global: {e}")
+        return default_data
 
 # ==========================================
 # 4. SISTEM LOGIN & AI
@@ -342,3 +324,4 @@ if check_password():
 
     if st.session_state['page'] == 'home': show_dashboard()
     else: show_detail()
+
