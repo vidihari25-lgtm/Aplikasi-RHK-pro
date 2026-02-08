@@ -482,6 +482,31 @@ if check_password():
         # 2. Tipe Graduasi (RHK 4 - Excel)
         elif "RHK 4" in rhk:
             st.info("ℹ️ **Mode Graduasi:** Upload Excel Data KPM untuk membuat banyak laporan sekaligus.")
+            
+            # --- FITUR BARU: TEMPLATE EXCEL ---
+            df_template = pd.DataFrame({
+                "Nama": ["Budi Santoso", "Siti Aminah"],
+                "NIK": ["1234567890", "0987654321"],
+                "Alamat": ["Desa A, RT 01", "Desa B, RT 02"],
+                "Kategori": ["PKH Murni", "BPNT + PKH"],
+                "Status": ["Graduasi Mandiri", "Graduasi Sejahtera"],
+                "Alasan": ["Sudah Mampu", "Memiliki Usaha"]
+            })
+            
+            buffer = io.BytesIO()
+            # Menggunakan engine default Pandas (openpyxl/xlwt)
+            with pd.ExcelWriter(buffer) as writer:
+                df_template.to_excel(writer, index=False)
+            
+            st.download_button(
+                label="📥 Download Template Excel Graduasi",
+                data=buffer.getvalue(),
+                file_name="Template_Graduasi.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True
+            )
+            # ----------------------------------
+            
             upl = st.file_uploader("Upload Excel (.xlsx)", type=['xlsx'])
             
             if upl:
