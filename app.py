@@ -277,7 +277,7 @@ if check_password():
         table = doc.add_table(rows=1, cols=2); table.autofit = False
         table.columns[0].width = Inches(3); table.columns[1].width = Inches(3)
         c2 = table.cell(0, 1).paragraphs[0]; c2.alignment = 1
-        c2.add_run(f"{meta['kab']}, {meta['tgl']}\nPendamping PKH\n\n")
+        c2.add_run(f"{meta['kab']}, {meta['tgl']}\nPengelola Layanan Operasional\n\n")
         if ttd: 
             try: c2.add_run().add_picture(io.BytesIO(ttd), height=Inches(0.8))
             except: pass
@@ -443,3 +443,4 @@ if check_password():
 
     if st.session_state['page'] == 'home': show_dashboard()
     else: show_detail()
+
