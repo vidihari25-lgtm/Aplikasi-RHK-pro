@@ -6,3 +6,6 @@ pandas
 Pillow
 openpyxl
 xlsxwriter
+google-api-python-client
+google-auth
+
