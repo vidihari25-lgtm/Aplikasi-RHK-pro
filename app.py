@@ -246,14 +246,15 @@ if check_password():
             response = model.generate_content(prompt)
             return json.loads(response.text)
         except Exception as e:
-            # Tidak lagi crash, tapi return None agar bisa dihandle
+            # Mengembalikan None jika terjadi error, akan ditangani di create_word_doc
             return None
 
     # ==========================================
     # 6. PEMBUAT DOKUMEN (Word & PDF)
     # ==========================================
     def create_word_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
-        # FIX ATTRIBUTE ERROR: Cek jika data kosong
+        # --- FIX ERROR ATTRIBUTE ERROR ---
+        # Jika 'data' kosong (AI gagal generate), hentikan proses agar tidak error
         if not data:
             return None
 
@@ -396,9 +397,11 @@ if check_password():
     def show_detail():
         rhk = st.session_state.get('selected_rhk')
         
-        # --- FIX KEYERROR: RESET JIKA RHK LAMA ---
+        # --- FIX KEYERROR: RESET OTOMATIS JIKA SESI KEDALUWARSA ---
+        # Ini mencegah aplikasi crash karena nama menu berubah
         if rhk is None or rhk not in CONFIG_LAPORAN:
-            st.warning("⚠️ Sesi lama terdeteksi. Me-refresh halaman...")
+            st.warning("⚠️ Data sesi kedaluwarsa. Me-refresh halaman secara otomatis...")
+            time.sleep(1)
             st.session_state['selected_rhk'] = None
             st.session_state['page'] = 'home'
             st.rerun()
@@ -477,7 +480,7 @@ if check_password():
                         # GENERATE AI
                         json_data = generate_isi_laporan(rhk, item['kegiatan'], u_kpm, "Peserta", meta['bulan'], lokasi, item['ket'])
                         
-                        # FIX ATTRIBUTE ERROR: Cek jika JSON valid
+                        # CEK DATA SEBELUM MEMBUAT DOC
                         if json_data:
                             word = create_word_doc(json_data, meta, item['fotos'], st.session_state['kop_bytes'], st.session_state['ttd_bytes'], item['ket'])
                             if word:
