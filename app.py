@@ -18,7 +18,7 @@ import re
 # ==========================================
 # 1. KONFIGURASI HALAMAN
 # ==========================================
-st.set_page_config(page_title="Aplikasi RHK PKH Pro Smart", layout="wide")
+st.set_page_config(page_title="Aplikasi RHK PKH Pro 2.0", layout="wide")
 
 # --- DAFTAR USER & PASSWORD ---
 DAFTAR_USER = {
@@ -41,18 +41,19 @@ except KeyError:
     st.error("🚨 Key 'GOOGLE_API_KEY' tidak ditemukan di secrets.toml.")
     st.stop()
 
-# --- KONFIGURASI AI CERDAS (GEMINI 2.0 FLASH) ---
+# --- KONFIGURASI AI TERBARU (GEMINI 2.0 FLASH) ---
 try:
     genai.configure(api_key=GOOGLE_API_KEY)
     generation_config = {
         "temperature": 0.7,
         "top_p": 0.95,
-        "top_k": 64,
+        "top_k": 40,
         "max_output_tokens": 8192,
         "response_mime_type": "application/json",
     }
+    # Update Model ke 2.0 Flash
     model = genai.GenerativeModel(
-        model_name="gemini-2.0-flash",
+        model_name="gemini-2.0-flash", 
         generation_config=generation_config,
     )
 except Exception as e:
@@ -155,7 +156,7 @@ if check_password():
 
     # --- Database Sederhana ---
     def init_db():
-        conn = sqlite3.connect('rhk_pro_smart.db')
+        conn = sqlite3.connect('rhk_pro_2.db')
         c = conn.cursor()
         c.execute('''CREATE TABLE IF NOT EXISTS user_settings (id INTEGER PRIMARY KEY, nama TEXT, nip TEXT, kpm INTEGER, prov TEXT, kab TEXT, kec TEXT, kel TEXT)''')
         c.execute('SELECT count(*) FROM user_settings')
@@ -164,12 +165,12 @@ if check_password():
         conn.commit(); conn.close()
 
     def get_user_settings():
-        conn = sqlite3.connect('rhk_pro_smart.db'); c = conn.cursor()
+        conn = sqlite3.connect('rhk_pro_2.db'); c = conn.cursor()
         c.execute('SELECT nama, nip, kpm, prov, kab, kec, kel FROM user_settings WHERE id=1')
         data = c.fetchone(); conn.close(); return data
 
     def save_user_settings(nama, nip, kpm, prov, kab, kec, kel):
-        conn = sqlite3.connect('rhk_pro_smart.db'); c = conn.cursor()
+        conn = sqlite3.connect('rhk_pro_2.db'); c = conn.cursor()
         c.execute('''UPDATE user_settings SET nama=?, nip=?, kpm=?, prov=?, kab=?, kec=?, kel=? WHERE id=1''', (nama, nip, kpm, prov, kab, kec, kel))
         conn.commit(); conn.close()
 
@@ -214,7 +215,7 @@ if check_password():
         return text.encode('latin-1', 'replace').decode('latin-1')
 
     # ==========================================
-    # 5. GENERATOR AI (SMART MODE)
+    # 5. GENERATOR AI (GEMINI 2.0 FLASH)
     # ==========================================
     def generate_isi_laporan(topik, detail, kpm_total, kpm_fokus, bulan, lokasi_lengkap, ket_info=""):
         prompt = f"""
@@ -228,7 +229,7 @@ if check_password():
         - Periode: {bulan}
         - KETERANGAN KHUSUS (Wajib masuk narasi): {ket_info}
 
-        Output JSON format (tanpa markdown ```json):
+        Output JSON format (wajib JSON valid):
         {{
             "gambaran_umum": "Jelaskan situasi wilayah dan urgensi kegiatan ini...",
             "maksud_tujuan": "Jelaskan tujuan strategis dan operasional...",
@@ -245,13 +246,17 @@ if check_password():
             response = model.generate_content(prompt)
             return json.loads(response.text)
         except Exception as e:
-            st.error(f"Error AI: {str(e)}. Coba lagi.")
+            # Tidak lagi crash, tapi return None agar bisa dihandle
             return None
 
     # ==========================================
     # 6. PEMBUAT DOKUMEN (Word & PDF)
     # ==========================================
     def create_word_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
+        # FIX ATTRIBUTE ERROR: Cek jika data kosong
+        if not data:
+            return None
+
         doc = Document()
         # Setup Margin
         for s in doc.sections: 
@@ -259,18 +264,24 @@ if check_password():
         
         # KOP SURAT
         if kop: 
-            p = doc.add_paragraph(); p.alignment = 1
-            p.add_run().add_picture(io.BytesIO(kop), width=Inches(6.2))
+            try:
+                p = doc.add_paragraph(); p.alignment = 1
+                p.add_run().add_picture(io.BytesIO(kop), width=Inches(6.2))
+            except: pass
         
         # JUDUL
         p = doc.add_paragraph(f"\nLAPORAN\nTENTANG\n{meta['judul'].upper()}\n{meta['bulan'].upper()}"); p.alignment = 1; p.runs[0].bold = True
         
-        # ISI
+        # ISI (Defined Inside to access 'doc')
         def add_section(title, content, is_list=False):
             doc.add_paragraph(title, style='Heading 1')
+            if not content: content = "-"
             if is_list:
-                for item in content:
-                    p = doc.add_paragraph(str(item), style='List Bullet')
+                if isinstance(content, list):
+                    for item in content:
+                        p = doc.add_paragraph(str(item), style='List Bullet')
+                else:
+                    doc.add_paragraph(str(content), style='List Bullet')
             else:
                 doc.add_paragraph(str(content)).alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
 
@@ -279,7 +290,10 @@ if check_password():
         
         doc.add_paragraph("C. Pelaksanaan Kegiatan", style='Heading 1')
         if extra_info: doc.add_paragraph(f"Catatan: {extra_info}", style='Quote')
-        for k in data.get('kegiatan', []): doc.add_paragraph(str(k), style='List Bullet')
+        
+        keg = data.get('kegiatan', [])
+        if keg:
+            for k in keg: doc.add_paragraph(str(k), style='List Bullet')
 
         # TABEL DATA KPM (Jika ada)
         if kpm_data:
@@ -303,7 +317,10 @@ if check_password():
         c2 = table.cell(0, 1).paragraphs[0]
         c2.alignment = 1
         c2.add_run(f"{meta['kab']}, {meta['tgl']}\nPendamping PKH\n\n")
-        if ttd: c2.add_run().add_picture(io.BytesIO(ttd), height=Inches(0.8))
+        if ttd: 
+            try:
+                c2.add_run().add_picture(io.BytesIO(ttd), height=Inches(0.8))
+            except: pass
         c2.add_run(f"\n{meta['nama']}\nNIP. {meta['nip']}")
 
         # FOTO
@@ -354,7 +371,7 @@ if check_password():
 
     # --- DASHBOARD UTAMA ---
     def show_dashboard():
-        st.title("📂 Aplikasi RHK PKH Pro (Smart Edition)")
+        st.title("📂 Aplikasi RHK PKH Pro (Gemini 2.0 Flash)")
         
         cols = st.columns(3)
         rhk_list = list(CONFIG_LAPORAN.keys())
@@ -375,14 +392,13 @@ if check_password():
                     st.session_state['page'] = 'detail'
                     st.rerun()
 
-    # --- HALAMAN DETAIL (DENGAN FIX ERROR) ---
+    # --- HALAMAN DETAIL (DENGAN FIX KEYERROR) ---
     def show_detail():
         rhk = st.session_state.get('selected_rhk')
         
-        # --- ANTI-CRASH VALIDATION ---
-        # Jika session lama (key error) terdeteksi, reset ke home
+        # --- FIX KEYERROR: RESET JIKA RHK LAMA ---
         if rhk is None or rhk not in CONFIG_LAPORAN:
-            st.warning("⚠️ Sesi kedaluwarsa, kembali ke menu utama...")
+            st.warning("⚠️ Sesi lama terdeteksi. Me-refresh halaman...")
             st.session_state['selected_rhk'] = None
             st.session_state['page'] = 'home'
             st.rerun()
@@ -457,11 +473,17 @@ if check_password():
                     
                     for i, item in enumerate(queue):
                         status.write(f"⏳ Memproses ({i+1}/{len(queue)}): {item['kegiatan']}...")
+                        
+                        # GENERATE AI
                         json_data = generate_isi_laporan(rhk, item['kegiatan'], u_kpm, "Peserta", meta['bulan'], lokasi, item['ket'])
                         
+                        # FIX ATTRIBUTE ERROR: Cek jika JSON valid
                         if json_data:
                             word = create_word_doc(json_data, meta, item['fotos'], st.session_state['kop_bytes'], st.session_state['ttd_bytes'], item['ket'])
-                            results.append({"judul": item['kegiatan'], "file": word})
+                            if word:
+                                results.append({"judul": item['kegiatan'], "file": word})
+                        else:
+                            st.warning(f"⚠️ Gagal generate: {item['kegiatan']} (AI Sibuk)")
                         
                         bar.progress((i + 1) / len(queue))
                     
@@ -483,7 +505,7 @@ if check_password():
         elif "RHK 4" in rhk:
             st.info("ℹ️ **Mode Graduasi:** Upload Excel Data KPM untuk membuat banyak laporan sekaligus.")
             
-            # --- FITUR BARU: TEMPLATE EXCEL ---
+            # --- FITUR TEMPLATE EXCEL ---
             df_template = pd.DataFrame({
                 "Nama": ["Budi Santoso", "Siti Aminah"],
                 "NIK": ["1234567890", "0987654321"],
@@ -494,7 +516,6 @@ if check_password():
             })
             
             buffer = io.BytesIO()
-            # Menggunakan engine default Pandas (openpyxl/xlwt)
             with pd.ExcelWriter(buffer) as writer:
                 df_template.to_excel(writer, index=False)
             
@@ -505,7 +526,6 @@ if check_password():
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                 use_container_width=True
             )
-            # ----------------------------------
             
             upl = st.file_uploader("Upload Excel (.xlsx)", type=['xlsx'])
             
@@ -552,7 +572,6 @@ if check_password():
 
         # 3. Tipe Standar (RHK 1, 5, 6, 7, 9)
         else:
-            # GUNAKAN FORM DISINI AGAR TIDAK ERROR SAAT GANTI INPUT
             with st.form("std_form"):
                 judul_keg = st.selectbox("Pilih Kegiatan", CONFIG_LAPORAN[rhk])
                 ket_add = st.text_area("Keterangan Tambahan", height=100, placeholder="Ceritakan sedikit tentang kegiatan ini...")
@@ -582,7 +601,7 @@ if check_password():
                             status.update(label="✅ Selesai!", state="complete", expanded=False)
                             st.rerun()
                         else:
-                            status.update(label="❌ Gagal menghubungi AI", state="error")
+                            status.update(label="❌ Gagal menghubungi AI (Traffic Tinggi). Coba lagi!", state="error")
             
             if st.session_state.get('generated_file_data'):
                 f = st.session_state['generated_file_data']
@@ -596,4 +615,3 @@ if check_password():
         show_dashboard()
     else:
         show_detail()
-
