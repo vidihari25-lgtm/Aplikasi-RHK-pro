@@ -460,7 +460,7 @@ if check_password():
 
     # UI MAIN
     def show_dashboard():
-        st.title("📂 Aplikasi RHK PKH Pro (Versi Stabil)"); cols = st.columns(3)
+        st.title("📂 Aplikasi RHK PKH Pro 2.0"); cols = st.columns(3)
         for i, rhk in enumerate(CONFIG_LAPORAN.keys()):
             with cols[i % 3]:
                 st.markdown(f"""<div style="background-color:#f0f2f6; padding:15px; border-radius:10px; margin-bottom:10px; border:1px solid #d1d5db;"><b>{rhk.split('–')[0]}</b><br><small>{rhk.split('–')[-1]}</small></div>""", unsafe_allow_html=True)
@@ -655,6 +655,7 @@ if check_password():
 
     if st.session_state['page'] == 'home': show_dashboard()
     else: show_detail()
+
 
 
 
