@@ -222,7 +222,7 @@ def create_word_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
     
     bio = io.BytesIO(); doc.save(bio); return bio
 
-# --- FUNGSI PDF DIPERBAIKI (TIDAK BERANTAKAN) ---
+# --- FUNGSI PDF DIPERBAIKI (UPDATED KOP 80%) ---
 def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
     if data is None: return None
     
@@ -232,17 +232,25 @@ def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
     pdf.add_page()
     pdf.set_margins(20, 20, 20)
 
-    # 2. KOP SURAT (Full Width 210mm)
+    # 2. KOP SURAT (Revisi: Lebar 80% dari A4)
     if kop:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
             tmp.write(kop)
             tmp.flush()
             tmp_path = tmp.name
         try:
-            # x=0, y=0 artinya pojok kiri atas kertas
-            # w=210 artinya selebar kertas A4
-            pdf.image(tmp_path, x=0, y=0, w=210)
-            # Paksa kursor turun 38mm agar tidak menimpa kop
+            # Hitung Dimensi
+            # Lebar A4 = 210mm
+            # Lebar Kop 80% = 210 * 0.8 = 168mm
+            # Posisi X agar tengah = (210 - 168) / 2 = 21mm
+            
+            w_kop = 210 * 0.8
+            x_kop = (210 - w_kop) / 2
+            
+            # Pasang Gambar
+            pdf.image(tmp_path, x=x_kop, y=0, w=w_kop)
+            
+            # Paksa kursor turun 38mm agar tidak menimpa kop (atur sesuai tinggi kop visual)
             pdf.set_y(38) 
         except: 
             pdf.ln(10)
@@ -444,10 +452,11 @@ if check_password():
         st.selectbox("Tahun", ["2026", "2027"], key="th_val", on_change=update_tanggal)
         st.text_input("Tanggal Surat", key="tgl_val")
         st.markdown("---")
-        kop = st.file_uploader("Kop Surat (JPG/PNG)", type=['png','jpg'], key="kop_up")
-        if kop: st.session_state['kop_bytes'] = kop.getvalue()
-        ttd = st.file_uploader("Tanda Tangan (JPG/PNG)", type=['png','jpg'], key="ttd_up")
-        if ttd: st.session_state['ttd_bytes'] = ttd.getvalue()
+        st.file_uploader("Kop Surat (JPG/PNG)", type=['png','jpg'], key="kop_up")
+        if st.session_state.get('kop_up'): st.session_state['kop_bytes'] = st.session_state['kop_up'].getvalue()
+        
+        st.file_uploader("Tanda Tangan (JPG/PNG)", type=['png','jpg'], key="ttd_up")
+        if st.session_state.get('ttd_up'): st.session_state['ttd_bytes'] = st.session_state['ttd_up'].getvalue()
 
     # UI MAIN
     def show_dashboard():
