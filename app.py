@@ -16,18 +16,18 @@ import json
 import re
 
 # --- LIBRARY GOOGLE DRIVE ---
-# Pastikan library ini terinstall: pip install google-api-python-client google-auth
+# Ensure these are in your requirements.txt: google-api-python-client, google-auth
 from google.oauth2 import service_account
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaIoBaseUpload
 
 # ==========================================
-# 1. KONFIGURASI HALAMAN
+# 1. PAGE CONFIGURATION
 # ==========================================
 st.set_page_config(page_title="Aplikasi RHK PKH Pro Cloud", layout="wide")
 
 # ==========================================
-# 2. DEFINISI CONFIG (DITARUH DI ATAS UNTUK VALIDASI)
+# 2. CONFIG DEFINITIONS (Placed at top for validation)
 # ==========================================
 CONFIG_LAPORAN = {
     "RHK 1 – Laporan Penyaluran bansos": ["Laporan Penyaluran Bantuan Sosial"],
@@ -41,8 +41,8 @@ CONFIG_LAPORAN = {
     "RHK 9 – Evaluasi Tugas Direktif": ["Evaluasi Penyelesaian Tugas"]
 }
 
-# --- FITUR ANTI-CRASH (SELF HEALING) ---
-# Kode ini akan otomatis mereset sesi jika mendeteksi data lama yang bikin error
+# --- ANTI-CRASH FEATURE (SELF HEALING) ---
+# Automatically resets session if invalid old data is detected
 if 'selected_rhk' in st.session_state and st.session_state['selected_rhk']:
     if st.session_state['selected_rhk'] not in CONFIG_LAPORAN:
         st.session_state.clear()
@@ -51,18 +51,21 @@ if 'selected_rhk' in st.session_state and st.session_state['selected_rhk']:
 # --- SECURITY ---
 DAFTAR_USER = {"admin": "admin123", "pendamping": "pkh2026", "user": "user"}
 
-try: GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
-except: st.error("🚨 Setting Secrets GOOGLE_API_KEY belum ada!"); st.stop()
+try: 
+    GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
+except: 
+    st.error("🚨 Setting Secrets GOOGLE_API_KEY is missing!"); st.stop()
 
-# --- SETUP AI (Versi Stabil untuk Konten Panjang) ---
+# --- AI SETUP (Stable Version for Long Content) ---
 try:
     genai.configure(api_key=GOOGLE_API_KEY)
-    # Menggunakan Gemini 1.5 Flash karena lebih stabil untuk instruksi JSON panjang daripada 2.0
+    # Using Gemini 1.5 Flash for better stability with long JSON instructions
     model = genai.GenerativeModel('gemini-1.5-flash', generation_config={"response_mime_type": "application/json"})
-except Exception as e: st.error(f"Error Konfigurasi AI: {e}")
+except Exception as e: 
+    st.error(f"Error AI Configuration: {e}")
 
 # ==========================================
-# 3. FUNGSI GOOGLE DRIVE
+# 3. GOOGLE DRIVE FUNCTIONS
 # ==========================================
 def get_drive_service():
     try:
@@ -117,7 +120,7 @@ if check_password():
     if not st.session_state['bln_val']: st.session_state['bln_val'] = "JANUARI"
     if not st.session_state['th_val']: st.session_state['th_val'] = "2026"
     
-    # --- DB LOKAL ---
+    # --- LOCAL DB ---
     def init_db():
         conn = sqlite3.connect('rhk_settings_new.db')
         c = conn.cursor()
@@ -133,7 +136,7 @@ if check_password():
     
     init_db()
 
-    # --- TOOLS DOKUMEN ---
+    # --- DOCUMENT TOOLS ---
     def compress_image(uploaded_file):
         try:
             uploaded_file.seek(0); image = Image.open(uploaded_file)
@@ -142,42 +145,42 @@ if check_password():
             return output
         except: uploaded_file.seek(0); return uploaded_file
 
-    # --- GENERATOR AI DENGAN PROMPT DETAIL (AGAR ISI TIDAK KOSONG) ---
+    # --- AI GENERATOR WITH DETAILED PROMPT (PREVENTS EMPTY CONTENT) ---
     def generate_ai(topik, detail, lokasi, bulan, info):
         prompt = f"""
-        Bertindaklah sebagai Pendamping Sosial PKH Profesional.
-        Buatlah isi laporan yang **PANJANG, DETAIL, dan NARATIF** (bukan poin-poin singkat).
+        Act as a Professional PKH Social Facilitator.
+        Create a **LONG, DETAILED, and NARRATIVE** activity report content (not short bullet points).
         
         DATA:
-        - Topik: {topik}
-        - Kegiatan: {detail}
-        - Lokasi: {lokasi}
-        - Bulan: {bulan}
-        - Info Tambahan: {info}
+        - Topic: {topik}
+        - Activity: {detail}
+        - Location: {lokasi}
+        - Month: {bulan}
+        - Additional Info: {info}
 
-        Output WAJIB JSON dengan struktur ini (isi teks paragraf panjang):
+        Output MUST be JSON with this structure (fill with long paragraph text in Indonesian):
         {{
-            "gambaran_umum": "Jelaskan kondisi wilayah, peserta, dan latar belakang kegiatan secara mendalam.",
-            "maksud_tujuan": "Jelaskan tujuan strategis dan teknis kegiatan ini.",
-            "ruang_lingkup": "Jelaskan sasaran peserta, metode, dan pihak yang terlibat.",
-            "kegiatan": ["Paragraf detil tentang persiapan...", "Paragraf detil tentang proses pelaksanaan...", "Paragraf detil tentang sesi tanya jawab/diskusi..."],
-            "hasil": ["Paragraf tentang hasil konkret 1...", "Paragraf tentang perubahan perilaku peserta..."],
-            "kesimpulan": "Kesimpulan menyeluruh tentang efektivitas kegiatan.",
-            "saran": ["Saran konstruktif untuk perbaikan masa depan."],
-            "penutup": "Kalimat penutup formal laporan kedinasan."
+            "gambaran_umum": "Explain regional conditions, participants, and background deeply.",
+            "maksud_tujuan": "Explain strategic and technical goals.",
+            "ruang_lingkup": "Explain target participants, methods, and involved parties.",
+            "kegiatan": ["Detailed paragraph on preparation...", "Detailed paragraph on execution process...", "Detailed paragraph on Q&A/discussion session..."],
+            "hasil": ["Paragraph on concrete result 1...", "Paragraph on participant behavior change..."],
+            "kesimpulan": "Overall conclusion on activity effectiveness.",
+            "saran": ["Constructive suggestions for future improvements."],
+            "penutup": "Formal closing sentence for official report."
         }}
         """
         try:
             res = model.generate_content(prompt)
-            # Membersihkan response jika ada markdown
+            # Clean response if markdown is present
             clean_text = res.text.replace("```json","").replace("```","").strip()
             return json.loads(clean_text)
         except Exception as e:
-            return None # Return None agar bisa dihandle error-nya
+            return None # Return None to handle error gracefully
 
-    # --- PEMBUAT DOCX DENGAN ANTI-ERROR ---
+    # --- DOCX CREATOR WITH ANTI-ERROR ---
     def create_doc(data, meta, imgs, kop, ttd, extra_info=None):
-        # CEK: Jika data kosong (AI Gagal), jangan lanjut biar gak error
+        # CHECK: If data is empty (AI Failed), stop to avoid error
         if not data: return None
 
         doc = Document()
@@ -189,7 +192,7 @@ if check_password():
         
         p = doc.add_paragraph(f"\nLAPORAN\nTENTANG\n{meta['judul']}\n{meta['bulan']}"); p.alignment=1; p.runs[0].bold=True
         
-        # Helper untuk tambah section aman (handling None)
+        # Helper for safe section adding
         def add_sec(judul, isi):
             doc.add_paragraph(judul, style='Heading 1')
             if not isi: isi = "-"
@@ -230,10 +233,10 @@ if check_password():
         bio = io.BytesIO(); doc.save(bio); return bio
 
     # ==========================================
-    # 5. UI UTAMA & LOGIKA TANGGAL
+    # 5. MAIN UI & DATE LOGIC
     # ==========================================
     
-    # --- LOGIKA TANGGAL (Feb=28, Lain=30) ---
+    # --- DATE LOGIC (Feb=28, Others=30) ---
     def update_tanggal():
         bulan = st.session_state.bln_val
         tahun = st.session_state.th_val
@@ -243,7 +246,7 @@ if check_password():
     # --- SIDEBAR ---
     u_data = get_set()
     with st.sidebar:
-        st.write("☁️ **Status: Cloud**" if "gcp_service_account" in st.secrets else "⚠️ **Lokal**")
+        st.write("☁️ **Status: Cloud**" if "gcp_service_account" in st.secrets else "⚠️ **Local**")
         
         with st.expander("👤 Profil Pendamping"):
             with st.form("prof"):
@@ -273,7 +276,7 @@ if check_password():
 
     def show_detail():
         rhk = st.session_state.get('selected_rhk')
-        # Double check agar tidak error
+        # Double check to avoid error
         if rhk not in CONFIG_LAPORAN: st.session_state['page']='home'; st.rerun(); return
 
         c1,c2 = st.columns([1,5])
@@ -283,7 +286,7 @@ if check_password():
         meta = {'nama':u_data[1], 'nip':u_data[2], 'kab':u_data[5], 'tgl':st.session_state.tgl_val, 'judul':rhk.split('–')[-1].upper(), 'bulan':f"{st.session_state.bln_val} {st.session_state.th_val}"}
         lokasi = f"{u_data[7]}, {u_data[6]}, {u_data[5]}"
 
-        # --- LOGIKA RHK ---
+        # --- RHK LOGIC ---
         if "RHK 4" in rhk: # Graduasi
             st.info("🎓 Mode Graduasi: Upload Excel Data KPM.")
             # Template
