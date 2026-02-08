@@ -97,36 +97,6 @@ def save_user_settings(nama, nip, kpm, prov, kab, kec, kel):
     c.execute('''UPDATE user_settings SET nama=?, nip=?, kpm=?, prov=?, kab=?, kec=?, kel=? WHERE id=1''', (nama, nip, kpm, prov, kab, kec, kel))
     conn.commit(); conn.close()
 
-# --- FUNGSI UTAMA PERBAIKAN GAMBAR PDF ---
-def prepare_image_for_pdf(image_bytes):
-    """
-    Mengubah bytes gambar apapun menjadi path file JPEG yang aman untuk FPDF.
-    Mengatasi masalah transparansi dan file lock.
-    """
-    if not image_bytes: return None
-    try:
-        # Buka gambar dari bytes
-        img = Image.open(io.BytesIO(image_bytes))
-        
-        # Konversi ke RGB (Hilangkan Alpha/Transparan agar tidak error/hitam)
-        if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
-            alpha = img.convert('RGBA').split()[-1]
-            bg = Image.new("RGB", img.size, (255, 255, 255))
-            bg.paste(img, mask=alpha)
-            img = bg
-        elif img.mode != 'RGB':
-            img = img.convert('RGB')
-            
-        # Simpan ke Temporary File sebagai JPEG
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp:
-            img.save(tmp, format='JPEG', quality=90)
-            tmp_path = tmp.name
-            
-        return tmp_path
-    except Exception as e:
-        print(f"Error convert image: {e}")
-        return None
-
 def compress_image(uploaded_file, quality=60, max_width=600):
     try:
         uploaded_file.seek(0)
@@ -146,12 +116,14 @@ def clean_text_for_pdf(text):
     if text is None: return "-" 
     text = str(text) 
     text = text.replace('\u2013', '-').replace('\u201c', '"').replace('\u201d', '"')
+    # Replace karakter aneh lainnya jika perlu
     return text.encode('latin-1', 'replace').decode('latin-1')
 
 # ==========================================
 # 4. GENERATOR AI & DOKUMEN
 # ==========================================
 
+# Setup AI
 try:
     GOOGLE_API_KEY = st.secrets["GOOGLE_API_KEY"]
     genai.configure(api_key=GOOGLE_API_KEY)
@@ -250,32 +222,36 @@ def create_word_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
     
     bio = io.BytesIO(); doc.save(bio); return bio
 
-# --- FUNGSI PDF (FINAL FIX: KOP & TTD PASTI TAMPIL) ---
+# --- FUNGSI PDF DIPERBAIKI (TIDAK BERANTAKAN) ---
 def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
     if data is None: return None
     
-    # Setup Halaman
+    # 1. Setup Halaman A4
     pdf = FPDF('P', 'mm', 'A4')
     pdf.set_auto_page_break(auto=True, margin=20)
     pdf.add_page()
     pdf.set_margins(20, 20, 20)
 
-    # 1. KOP SURAT (MENGGUNAKAN HELPER BARU)
+    # 2. KOP SURAT (Full Width 210mm)
     if kop:
-        tmp_kop = prepare_image_for_pdf(kop)
-        if tmp_kop:
-            try:
-                # x=0, y=0, w=210 (Full Header)
-                pdf.image(tmp_kop, x=0, y=0, w=210)
-                pdf.set_y(38) # Turunkan kursor manual
-            except: 
-                pdf.ln(10)
-            finally:
-                if os.path.exists(tmp_kop): os.remove(tmp_kop)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
+            tmp.write(kop)
+            tmp.flush()
+            tmp_path = tmp.name
+        try:
+            # x=0, y=0 artinya pojok kiri atas kertas
+            # w=210 artinya selebar kertas A4
+            pdf.image(tmp_path, x=0, y=0, w=210)
+            # Paksa kursor turun 38mm agar tidak menimpa kop
+            pdf.set_y(38) 
+        except: 
+            pdf.ln(10)
+        finally:
+            if os.path.exists(tmp_path): os.remove(tmp_path)
     else:
         pdf.ln(10)
 
-    # 2. JUDUL
+    # 3. JUDUL
     pdf.set_font("Arial", "B", 12)
     title_text = f"LAPORAN\nTENTANG\n{clean_text_for_pdf(meta['judul'].upper())}\n{clean_text_for_pdf(meta['bulan'].upper())}"
     pdf.multi_cell(0, 6, title_text, align='C')
@@ -291,7 +267,7 @@ def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
         
         if is_list and isinstance(content, list):
             for item in content:
-                pdf.set_x(25)
+                pdf.set_x(25) # Indentasi
                 pdf.multi_cell(0, 6, f"- {clean_text_for_pdf(item)}")
         else:
             pdf.multi_cell(0, 6, clean_text_for_pdf(str(content)))
@@ -330,13 +306,13 @@ def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
     add_section_pdf("D. Hasil", data.get('hasil'), True)
     add_section_pdf("E. Penutup", data.get('penutup'))
 
-    # 4. TANDA TANGAN
+    # 4. TANDA TANGAN (Layout Kanan)
     if pdf.get_y() > 220: pdf.add_page()
     else: pdf.ln(10)
     
     pdf.set_font("Arial", "", 11)
-    x_block = 130 # Koordinat blok TTD kanan
-    w_block = 60
+    x_block = 130 # Koordinat X untuk blok kanan
+    w_block = 60  # Lebar blok tanda tangan
     
     # Tanggal & Jabatan
     pdf.set_x(x_block)
@@ -344,21 +320,20 @@ def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
     pdf.set_x(x_block)
     pdf.multi_cell(w_block, 6, "Pengelola Layanan Operasional", align='C')
     
-    # Gambar TTD (MENGGUNAKAN HELPER BARU)
+    # Gambar TTD
     if ttd:
-        tmp_ttd = prepare_image_for_pdf(ttd)
-        if tmp_ttd:
-            try:
-                y_pos = pdf.get_y()
-                # Gambar TTD (tinggi 25mm)
-                pdf.image(tmp_ttd, x=x_block + 5, y=y_pos, h=25)
-                pdf.set_y(y_pos + 27) # Geser kursor ke bawah gambar
-            except: 
-                pdf.ln(25)
-            finally:
-                if os.path.exists(tmp_ttd): os.remove(tmp_ttd)
-        else:
-            pdf.ln(25)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_ttd:
+            tmp_ttd.write(ttd)
+            tmp_ttd.flush()
+            ttd_path = tmp_ttd.name
+        try:
+            y_img = pdf.get_y()
+            # Gambar ditaruh di tengah blok, tinggi fix 25mm
+            pdf.image(ttd_path, x=x_block + 5, y=y_img, h=25)
+            pdf.set_y(y_img + 27)
+        except: pdf.ln(25)
+        finally:
+            if os.path.exists(ttd_path): os.remove(ttd_path)
     else:
         pdf.ln(25)
     
@@ -378,15 +353,18 @@ def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
         pdf.cell(0, 10, "DOKUMENTASI KEGIATAN", ln=True, align='C')
         pdf.ln(5)
         for img_bytes in imgs:
-            tmp_img = prepare_image_for_pdf(img_bytes)
-            if tmp_img:
-                try:
-                    x_center = (210 - 120) / 2
-                    pdf.image(tmp_img, x=x_center, w=120)
-                    pdf.ln(5)
-                except: pass
-                finally:
-                    if os.path.exists(tmp_img): os.remove(tmp_img)
+            compressed = compress_image(img_bytes)
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_img:
+                tmp_img.write(compressed.getvalue())
+                tmp_img.flush()
+                img_path = tmp_img.name
+            try:
+                x_center = (210 - 120) / 2
+                pdf.image(img_path, x=x_center, w=120)
+                pdf.ln(5)
+            except: pass
+            finally:
+                if os.path.exists(img_path): os.remove(img_path)
 
     return pdf.output(dest='S').encode('latin-1')
 
