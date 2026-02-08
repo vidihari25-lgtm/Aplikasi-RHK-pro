@@ -132,22 +132,33 @@ except Exception as e:
     st.error(f"Gagal konfigurasi AI: {e}")
 
 def generate_isi_laporan(topik, detail, kpm_total, kpm_fokus, bulan, lokasi_lengkap, ket_info=""):
+    # UPDATE PROMPT: Menambahkan instruksi bahasa birokrasi
     prompt = f"""
-    Role: Pendamping PKH. Buat JSON Laporan Kegiatan.
-    Data: {topik} | {detail} | {lokasi_lengkap} | {bulan}
-    Catatan: {ket_info}
+    Role: Pendamping PKH Profesional Kemensos RI.
+    Tugas: Buat JSON konten Laporan Kegiatan Bulanan.
+    
+    Konteks Data:
+    - Topik: {topik}
+    - Detail Kegiatan: {detail}
+    - Lokasi & Waktu: {lokasi_lengkap}, Bulan {bulan}
+    - Catatan Tambahan User: {ket_info}
+    
+    Instruksi Gaya Bahasa:
+    - Gunakan bahasa Indonesia yang baku, formal, dan bergaya birokrasi pemerintahan.
+    - Objektif, jelas, dan menggunakan istilah teknis pekerjaan sosial (KPM, Graduasi, P2K2, Termin, DTKS, SIKS-NG).
+    - Hindari pengulangan kalimat yang tidak perlu.
     
     Output JSON (lowercase key):
     {{
-        "gambaran_umum": "Paragraf...",
-        "maksud_tujuan": "Paragraf...",
-        "ruang_lingkup": "Paragraf...",
-        "dasar_hukum": ["Aturan 1", "Aturan 2"],
-        "kegiatan": ["Detail 1...", "Detail 2..."],
-        "hasil": ["Hasil 1...", "Hasil 2..."],
-        "kesimpulan": "Paragraf...",
-        "saran": ["Saran 1...", "Saran 2..."],
-        "penutup": "Paragraf..."
+        "gambaran_umum": "Paragraf pendahuluan...",
+        "maksud_tujuan": "Paragraf tujuan kegiatan...",
+        "ruang_lingkup": "Paragraf ruang lingkup...",
+        "dasar_hukum": ["Undang-Undang terkait...", "Permensos terkait..."],
+        "kegiatan": ["Rincian proses kegiatan 1...", "Rincian proses kegiatan 2..."],
+        "hasil": ["Hasil konkret 1...", "Hasil konkret 2..."],
+        "kesimpulan": "Paragraf kesimpulan...",
+        "saran": ["Saran tindak lanjut 1...", "Saran tindak lanjut 2..."],
+        "penutup": "Paragraf penutup..."
     }}
     """
     try:
@@ -155,6 +166,11 @@ def generate_isi_laporan(topik, detail, kpm_total, kpm_fokus, bulan, lokasi_leng
         text = response.text.replace("```json", "").replace("```", "").strip()
         return json.loads(text)
     except Exception as e:
+        # UPDATE: Error Handling lebih spesifik
+        if "429" in str(e):
+            st.error("⚠️ Kuota AI Penuh (Rate Limit). Tunggu 1 menit sebelum mencoba lagi.")
+        else:
+            st.error(f"Error AI: {e}")
         return None
 
 def create_word_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
@@ -311,7 +327,7 @@ def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
             pdf.cell(col_w, 6, clean_text_for_pdf(str(v)), border=1, ln=True)
         pdf.ln(5)
 
-    add_section_pdf("D. Hasil", data.get('hasil'), True)
+    add_section_pdf("D. Hasil", data.get('hasil', True))
     add_section_pdf("E. Penutup", data.get('penutup'))
 
     # 4. TANDA TANGAN (Layout Kanan)
@@ -332,6 +348,7 @@ def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
     if ttd:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_ttd:
             tmp_ttd.write(ttd)
+            tmp_ttd.flush()
             tmp_ttd.flush()
             ttd_path = tmp_ttd.name
         try:
@@ -479,7 +496,7 @@ if check_password():
         meta = {'bulan': f"{st.session_state.bln_val} {st.session_state.th_val}", 'nama': u_nama, 'nip': u_nip, 'kab': u_kab, 'kec': u_kec, 'kel': u_kel, 'tgl': st.session_state.tgl_val, 'judul': rhk.split('–')[-1].upper()}
         lokasi = f"{u_kel}, {u_kec}, {u_kab}"
         
-                # LOGIKA TAMPILAN
+        # LOGIKA TAMPILAN
         if "RHK 2" in rhk or "RHK 3" in rhk or "RHK 8" in rhk:
             q_key = 'rhk2_queue' if "RHK 2" in rhk else ('rhk3_queue' if "RHK 3" in rhk else 'rhk8_queue')
             r_key = q_key.replace('queue', 'results')
@@ -493,10 +510,9 @@ if check_password():
                     "3. Memulai Usaha"
                 ],
                 "Modul Kesehatan dan Gizi": [
-                    "1. Pentingnya Gizi dan Layanan KesehatanIbu Hamil",
+                    "1. Pentingnya Gizi dan Layanan Ibu Hamil",
                     "2. Pentingnya Gizi Untuk Ibu Menyusui dan Balita",
                     "3. Kesakitan pada Anak dan Kesehatan Lingkungan"
-                    "4. Permainan"
                 ],
                 "Modul Kesejahteraan": [
                     "1. Pelayanan bagi Penyandang Disabilitas Berat",
@@ -504,14 +520,13 @@ if check_password():
                 ],
                 "Modul Pengasuhan dan Pendidikan": [
                     "1. Menjadi Orang Tua yang Lebih Baik",
-                    "2. Memahami Perkembangan dan Perilaku Anak",
+                    "2. Memahami Perilaku Anak",
                     "3. Memahami Cara Anak Usia Dini Belajar",
                     "4. Membantu Anak Sukses di Sekolah"
                 ],
                 "Modul Perlindungan Anak": [
-                    "1. Upaya Pencegahan Kekerasan Dan Perilaku Salah Pada Anak",
-                    "2. Penelantaran dan Eksploitas Terhadap Anak",
-                    "3. Energizer Dan Ice Breaking Games"
+                    "1. Pencegahan Kekerasan Terhadap Anak",
+                    "2. Penelantaran dan Eksploitasi Anak"
                 ],
                 "Modul Stunting": [
                     "1. Pencegahan dan Penanganan Stunting",
@@ -567,21 +582,32 @@ if check_password():
                             st.session_state[q_key].append({"kegiatan": kegiatan, "ket": ket_q, "fotos": [io.BytesIO(f.getvalue()) for f in fotos]})
                             st.success("Masuk antrian!"); st.rerun()
             
-            # --- TAMPILAN ANTRIAN (SAMA UNTUK SEMUA) ---
+            # --- TAMPILAN ANTRIAN (DENGAN FITUR HAPUS) ---
             queue = st.session_state[q_key]
             if queue:
                 st.write(f"**Antrian ({len(queue)} Item):**")
-                for i, q in enumerate(queue): st.text(f"{i+1}. {q['kegiatan']} - {q['ket']}")
+                
+                # Loop dengan fitur Hapus
+                for i, q in enumerate(queue):
+                    col_txt, col_del = st.columns([0.85, 0.15])
+                    with col_txt:
+                        st.text(f"{i+1}. {q['kegiatan']} - {q['ket']}")
+                    with col_del:
+                        if st.button("🗑️ Hapus", key=f"del_{q_key}_{i}"):
+                            st.session_state[q_key].pop(i)
+                            st.rerun()
+
                 if st.button("🚀 GENERATE SEMUA", type="primary"):
                     results = []; bar = st.progress(0)
-                    for i, item in enumerate(queue):
-                        # Panggil AI generate
-                        jd = generate_isi_laporan(rhk, item['kegiatan'], u_kpm, "Peserta", meta['bulan'], lokasi, item['ket'])
-                        if jd: 
-                            w = create_word_doc(jd, meta, item['fotos'], st.session_state['kop_bytes'], st.session_state['ttd_bytes'], item['ket'])
-                            p = create_pdf_doc(jd, meta, item['fotos'], st.session_state['kop_bytes'], st.session_state['ttd_bytes'], item['ket'])
-                            if w: results.append({"judul": item['kegiatan'], "file": w, "file_pdf": p})
-                        bar.progress((i + 1) / len(queue))
+                    with st.spinner("Sedang menghubungi AI dan menyusun dokumen..."):
+                        for i, item in enumerate(queue):
+                            # Panggil AI generate
+                            jd = generate_isi_laporan(rhk, item['kegiatan'], u_kpm, "Peserta", meta['bulan'], lokasi, item['ket'])
+                            if jd: 
+                                w = create_word_doc(jd, meta, item['fotos'], st.session_state['kop_bytes'], st.session_state['ttd_bytes'], item['ket'])
+                                p = create_pdf_doc(jd, meta, item['fotos'], st.session_state['kop_bytes'], st.session_state['ttd_bytes'], item['ket'])
+                                if w: results.append({"judul": item['kegiatan'], "file": w, "file_pdf": p})
+                            bar.progress((i + 1) / len(queue))
                     st.session_state[r_key] = results; st.success("Selesai!"); st.rerun()
             
             if st.session_state.get(r_key):
@@ -607,14 +633,15 @@ if check_password():
                         photos = st.file_uploader("Foto", accept_multiple_files=True)
                         if st.button("🚀 Generate") and photos:
                             res = []; p_data = [io.BytesIO(f.getvalue()) for f in photos]; bar = st.progress(0)
-                            for i, nm in enumerate(sel_kpm):
-                                row = df[df['Nama'] == nm].iloc[0].to_dict()
-                                jd = generate_isi_laporan(rhk, f"Graduasi {nm}", 1, nm, meta['bulan'], lokasi, f"Graduasi {nm}")
-                                if jd:
-                                    w = create_word_doc(jd, meta, p_data, st.session_state['kop_bytes'], st.session_state['ttd_bytes'], f"Graduasi {nm}", row)
-                                    p = create_pdf_doc(jd, meta, p_data, st.session_state['kop_bytes'], st.session_state['ttd_bytes'], f"Graduasi {nm}", row)
-                                    if w: res.append({"judul": nm, "file": w, "file_pdf": p})
-                                bar.progress((i+1)/len(sel_kpm))
+                            with st.spinner("Memproses data graduasi..."):
+                                for i, nm in enumerate(sel_kpm):
+                                    row = df[df['Nama'] == nm].iloc[0].to_dict()
+                                    jd = generate_isi_laporan(rhk, f"Graduasi {nm}", 1, nm, meta['bulan'], lokasi, f"Graduasi {nm}")
+                                    if jd:
+                                        w = create_word_doc(jd, meta, p_data, st.session_state['kop_bytes'], st.session_state['ttd_bytes'], f"Graduasi {nm}", row)
+                                        p = create_pdf_doc(jd, meta, p_data, st.session_state['kop_bytes'], st.session_state['ttd_bytes'], f"Graduasi {nm}", row)
+                                        if w: res.append({"judul": nm, "file": w, "file_pdf": p})
+                                    bar.progress((i+1)/len(sel_kpm))
                             st.session_state['rhk4_graduasi_results'] = res; st.rerun()
                 except: st.error("Format Excel Salah")
             
@@ -634,7 +661,7 @@ if check_password():
                 if st.form_submit_button("🚀 BUAT LAPORAN", type="primary"):
                     if not ft: st.error("Foto wajib!")
                     else:
-                        with st.status("Sedang bekerja..."):
+                        with st.spinner("Sedang menghubungi AI dan menyusun dokumen..."):
                             jd = generate_isi_laporan(rhk, jk, u_kpm, "Peserta", meta['bulan'], lokasi, ka)
                             if jd:
                                 imgs_data = [io.BytesIO(f.getvalue()) for f in ft]
@@ -655,7 +682,3 @@ if check_password():
 
     if st.session_state['page'] == 'home': show_dashboard()
     else: show_detail()
-
-
-
-
