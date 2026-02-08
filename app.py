@@ -493,9 +493,10 @@ if check_password():
                     "3. Memulai Usaha"
                 ],
                 "Modul Kesehatan dan Gizi": [
-                    "1. Pentingnya Gizi dan Layanan Ibu Hamil",
+                    "1. Pentingnya Gizi dan Layanan KesehatanIbu Hamil",
                     "2. Pentingnya Gizi Untuk Ibu Menyusui dan Balita",
                     "3. Kesakitan pada Anak dan Kesehatan Lingkungan"
+                    "4. Permainan"
                 ],
                 "Modul Kesejahteraan": [
                     "1. Pelayanan bagi Penyandang Disabilitas Berat",
@@ -503,13 +504,14 @@ if check_password():
                 ],
                 "Modul Pengasuhan dan Pendidikan": [
                     "1. Menjadi Orang Tua yang Lebih Baik",
-                    "2. Memahami Perilaku Anak",
+                    "2. Memahami Perkembangan dan Perilaku Anak",
                     "3. Memahami Cara Anak Usia Dini Belajar",
                     "4. Membantu Anak Sukses di Sekolah"
                 ],
                 "Modul Perlindungan Anak": [
-                    "1. Pencegahan Kekerasan Terhadap Anak",
-                    "2. Penelantaran dan Eksploitasi Anak"
+                    "1. Upaya Pencegahan Kekerasan Dan Perilaku Salah Pada Anak",
+                    "2. Penelantaran dan Eksploitas Terhadap Anak"
+                    "3. Energizer Dan Ice Breaking Games"
                 ],
                 "Modul Stunting": [
                     "1. Pencegahan dan Penanganan Stunting",
@@ -653,4 +655,5 @@ if check_password():
 
     if st.session_state['page'] == 'home': show_dashboard()
     else: show_detail()
+
 
