@@ -510,7 +510,7 @@ if check_password():
                 ],
                 "Modul Perlindungan Anak": [
                     "1. Upaya Pencegahan Kekerasan Dan Perilaku Salah Pada Anak",
-                    "2. Penelantaran dan Eksploitas Terhadap Anak"
+                    "2. Penelantaran dan Eksploitas Terhadap Anak",
                     "3. Energizer Dan Ice Breaking Games"
                 ],
                 "Modul Stunting": [
@@ -655,5 +655,6 @@ if check_password():
 
     if st.session_state['page'] == 'home': show_dashboard()
     else: show_detail()
+
 
 
