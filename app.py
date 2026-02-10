@@ -267,7 +267,7 @@ def create_word_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
         try: 
             p = doc.add_paragraph()
             p.alignment = 1
-            # REVISI: Ukuran kop 80% lebar A4 (21cm * 0.8 = 16.8cm)
+            # 80% Lebar A4 (21cm) = 16.8cm
             p.add_run().add_picture(io.BytesIO(kop), width=Cm(16.8))
         except: pass
     
@@ -391,10 +391,20 @@ def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
         with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
             tmp.write(kop); tmp.flush(); tmp_path = tmp.name
         try: 
-            # 210mm * 0.8 = 168mm (80% lebar A4)
-            w_kop = 210 * 0.8; x_kop = (210 - w_kop) / 2
-            pdf.image(tmp_path, x=x_kop, y=10, w=w_kop)
-            pdf.set_y(40) 
+            # --- FIX OVERLAPPING DENGAN MENGHITUNG TINGGI GAMBAR ---
+            img_obj = Image.open(io.BytesIO(kop))
+            w_px, h_px = img_obj.size
+            
+            # Lebar target di PDF: 168mm (80% dari 210mm)
+            target_w = 210 * 0.8
+            # Hitung tinggi proporsional di PDF (mm)
+            target_h = (target_w / w_px) * h_px
+            
+            x_kop = (210 - target_w) / 2
+            pdf.image(tmp_path, x=x_kop, y=10, w=target_w)
+            
+            # Set posisi Y di bawah gambar + margin 5mm agar tidak tertumpuk
+            pdf.set_y(10 + target_h + 5) 
         except: pdf.ln(10)
         finally: 
             if os.path.exists(tmp_path): os.remove(tmp_path)
