@@ -267,7 +267,8 @@ def create_word_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
         try: 
             p = doc.add_paragraph()
             p.alignment = 1
-            p.add_run().add_picture(io.BytesIO(kop), width=Inches(6.2))
+            # REVISI: Ukuran kop 80% lebar A4 (21cm * 0.8 = 16.8cm)
+            p.add_run().add_picture(io.BytesIO(kop), width=Cm(16.8))
         except: pass
     
     # --- HEADER TAMBAHAN ---
@@ -390,6 +391,7 @@ def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
         with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
             tmp.write(kop); tmp.flush(); tmp_path = tmp.name
         try: 
+            # 210mm * 0.8 = 168mm (80% lebar A4)
             w_kop = 210 * 0.8; x_kop = (210 - w_kop) / 2
             pdf.image(tmp_path, x=x_kop, y=10, w=w_kop)
             pdf.set_y(40) 
