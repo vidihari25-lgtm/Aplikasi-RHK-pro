@@ -221,8 +221,15 @@ def generate_isi_laporan(topik, detail, kpm_total, kpm_fokus, bulan, lokasi_leng
     - Konteks Tambahan: {ket_info}
     - Sasaran: {kpm_fokus} ({kpm_total} orang)
 
+    Instruksi Khusus Bagian "Dasar Hukum":
+    JANGAN PERNAH menggunakan kalimat "Surat Tugas dari Koordinator PKH Kabupaten/Kota Nomor: ... tanggal ...".
+    Gunakan HANYA poin-poin dasar hukum normatif berikut ini:
+    1. Peraturan Menteri Sosial Republik Indonesia Nomor 1 Tahun 2018 tentang Program Keluarga Harapan.
+    2. Keputusan Direktur Jaminan Sosial Keluarga tentang Petunjuk Teknis Pelaksanaan Program Keluarga Harapan yang berlaku.
+    3. Rencana Kerja Tahunan (RKT) Pendamping Sosial PKH Tahun 2026.
+
     Instruksi Format:
-    Gunakan Bahasa Indonesia Ejaan Yang Disempurnakan (EYD) yang baku, kalimat efektif, dan gaya bahasa laporan resmi dinas sosial. Hindari kata-kata santai.
+    Gunakan Bahasa Indonesia Ejaan Yang Disempurnakan (EYD) yang baku, kalimat efektif, dan gaya bahasa laporan resmi dinas sosial.
 
     Output Wajib JSON (tanpa markdown ```json):
     {{
@@ -230,7 +237,7 @@ def generate_isi_laporan(topik, detail, kpm_total, kpm_fokus, bulan, lokasi_leng
          "umum": "Paragraf pembuka yang menjelaskan latar belakang umum program PKH dan pentingnya kegiatan ini.",
          "maksud_tujuan": "Paragraf menjelaskan maksud dan tujuan spesifik dilaksanakannya kegiatan {detail}.",
          "ruang_lingkup": "Paragraf menjelaskan batasan kegiatan, lokasi, dan sasaran peserta.",
-         "dasar": ["Poin dasar hukum atau surat tugas (buat 2-3 contoh umum yang relevan dengan PKH/Kemensos)"]
+         "dasar": ["Peraturan Menteri Sosial Republik Indonesia Nomor 1 Tahun 2018 tentang Program Keluarga Harapan", "Keputusan Direktur Jaminan Sosial Keluarga tentang Petunjuk Teknis Pelaksanaan Program Keluarga Harapan", "Rencana Kerja Tahunan (RKT) Pendamping Sosial PKH Tahun 2026"]
       }},
       "kegiatan": "Paragraf narasi detail yang menjelaskan jalannya kegiatan dari awal hingga akhir secara kronologis dan teknis.",
       "hasil": "Paragraf atau poin-poin yang menjelaskan output konkret, dampak, atau hasil yang dicapai dari kegiatan tersebut.",
@@ -262,8 +269,21 @@ def create_word_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
             p.alignment = 1
             p.add_run().add_picture(io.BytesIO(kop), width=Inches(6.2))
         except: pass
+    
+    # --- HEADER TAMBAHAN (SESUAI REQUEST) ---
+    # Menampilkan Jenis RHK dan Nama Kegiatan di bawah Kop
+    p_rhk = doc.add_paragraph(f"LAPORAN KEGIATAN {meta.get('rhk_id', 'RHK ...').upper()}")
+    p_rhk.alignment = 1 # Center
+    p_rhk.runs[0].bold = True
+    p_rhk.runs[0].font.size = Pt(12) # Sedikit lebih besar
+    
+    p_keg = doc.add_paragraph(f"{meta.get('kegiatan_spesifik', 'Isi Pilihan Laporan Harian')}")
+    p_keg.alignment = 1 # Center
+    p_keg.runs[0].bold = True
+    
+    doc.add_paragraph("________________________________________________________________________________________________").alignment = 1
 
-    # --- JUDUL ---
+    # --- JUDUL RESMI ---
     p = doc.add_paragraph(f"\nLAPORAN PELAKSANAAN TUGAS\nTENTANG\n{meta['judul'].upper()}\n{meta['bulan'].upper()}")
     p.alignment = 1 # Center
     for r in p.runs: r.bold = True
@@ -290,7 +310,10 @@ def create_word_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
     doc.add_paragraph("    4. Dasar", style='Normal')
     dasar = p_data.get('dasar', [])
     if isinstance(dasar, list):
-        for item in dasar: doc.add_paragraph(str(item), style='List Bullet')
+        for item in dasar: 
+            # Filter Safety: Jika AI masih bandel mengeluarkan Surat Tugas
+            if "Surat Tugas" not in item:
+                doc.add_paragraph(str(item), style='List Bullet')
     else:
         add_text_body(str(dasar))
 
@@ -370,6 +393,14 @@ def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
             if os.path.exists(tmp_path): os.remove(tmp_path)
     else: pdf.ln(10)
 
+    # --- HEADER TAMBAHAN (SESUAI REQUEST) ---
+    pdf.set_font("Arial", "B", 12)
+    pdf.cell(0, 6, f"LAPORAN KEGIATAN {clean_text_for_pdf(meta.get('rhk_id', 'RHK ...').upper())}", ln=True, align='C')
+    pdf.cell(0, 6, f"{clean_text_for_pdf(meta.get('kegiatan_spesifik', 'Isi Pilihan Laporan Harian'))}", ln=True, align='C')
+    pdf.line(25, pdf.get_y(), 185, pdf.get_y()) # Garis bawah
+    pdf.ln(5)
+
+    # --- JUDUL ---
     pdf.set_font("Arial", "B", 12)
     title_text = f"LAPORAN PELAKSANAAN TUGAS\nTENTANG\n{clean_text_for_pdf(meta['judul'].upper())}\n{clean_text_for_pdf(meta['bulan'].upper())}"
     pdf.multi_cell(0, 6, title_text, align='C')
@@ -397,7 +428,8 @@ def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
     dasar = p_data.get('dasar', [])
     if isinstance(dasar, list):
         for item in dasar: 
-            pdf.set_x(35); pdf.multi_cell(0, 6, f"- {clean_text_for_pdf(item)}")
+            if "Surat Tugas" not in item:
+                pdf.set_x(35); pdf.multi_cell(0, 6, f"- {clean_text_for_pdf(item)}")
     else:
         pdf.set_x(35); pdf.multi_cell(0, 6, clean_text_for_pdf(str(dasar)))
     pdf.ln(3)
@@ -625,7 +657,21 @@ if check_password():
         c1, c2 = st.columns([1, 6]); 
         if c1.button("⬅️ Kembali", use_container_width=True): st.session_state['page'] = 'home'; st.rerun()
         c2.markdown(f"### 📝 {rhk}")
-        meta = {'bulan': f"{st.session_state.bln_val} {st.session_state.th_val}", 'nama': u_nama, 'nip': u_nip, 'jabatan': u_jabatan if u_jabatan else "Pendamping Sosial", 'kab': u_kab, 'kec': u_kec, 'kel': u_kel, 'tgl': st.session_state.tgl_val, 'judul': rhk.split('–')[-1].upper()}
+        
+        # Update Meta Data: Tambahkan rhk_id untuk header
+        meta = {
+            'bulan': f"{st.session_state.bln_val} {st.session_state.th_val}", 
+            'nama': u_nama, 
+            'nip': u_nip, 
+            'jabatan': u_jabatan if u_jabatan else "Pendamping Sosial", 
+            'kab': u_kab, 
+            'kec': u_kec, 
+            'kel': u_kel, 
+            'tgl': st.session_state.tgl_val, 
+            'judul': rhk.split('–')[-1].upper(),
+            'rhk_id': rhk.split('–')[0] # Contoh: RHK 1
+        }
+        
         lokasi = f"{u_kel}, {u_kec}, {u_kab}"
         if "RHK 2" in rhk or "RHK 3" in rhk or "RHK 8" in rhk:
             q_key = 'rhk2_queue' if "RHK 2" in rhk else ('rhk3_queue' if "RHK 3" in rhk else 'rhk8_queue'); r_key = q_key.replace('queue', 'results')
@@ -664,6 +710,8 @@ if check_password():
                     with st.spinner("Sedang menghubungi AI dan menyusun dokumen..."):
                         for i, item in enumerate(queue):
                             jd = generate_isi_laporan(rhk, item['kegiatan'], u_kpm, "Peserta", meta['bulan'], lokasi, item['ket'])
+                            # Update meta untuk kegiatan spesifik saat generate doc
+                            meta['kegiatan_spesifik'] = item['kegiatan']
                             if jd: 
                                 w = create_word_doc(jd, meta, item['fotos'], st.session_state['kop_bytes'], st.session_state['ttd_bytes'], item['ket'])
                                 p = create_pdf_doc(jd, meta, item['fotos'], st.session_state['kop_bytes'], st.session_state['ttd_bytes'], item['ket'])
@@ -692,6 +740,7 @@ if check_password():
                             with st.spinner("Memproses data graduasi..."):
                                 for i, nm in enumerate(sel_kpm):
                                     row = df[df['Nama'] == nm].iloc[0].to_dict(); jd = generate_isi_laporan(rhk, f"Graduasi {nm}", 1, nm, meta['bulan'], lokasi, f"Graduasi {nm}")
+                                    meta['kegiatan_spesifik'] = f"Graduasi KPM: {nm}"
                                     if jd:
                                         w = create_word_doc(jd, meta, p_data, st.session_state['kop_bytes'], st.session_state['ttd_bytes'], f"Graduasi {nm}", row)
                                         p = create_pdf_doc(jd, meta, p_data, st.session_state['kop_bytes'], st.session_state['ttd_bytes'], f"Graduasi {nm}", row)
@@ -718,6 +767,7 @@ if check_password():
                         full_context = f"Menggunakan {aplikasi}. {ket}"
                         with st.spinner("Mengolah data Verivali..."):
                             jd = generate_isi_laporan(rhk, kegiatan, u_kpm, "KPM", meta['bulan'], lokasi, full_context)
+                            meta['kegiatan_spesifik'] = kegiatan
                             if jd:
                                 imgs_data = [io.BytesIO(f.getvalue()) for f in fotos]
                                 w = create_word_doc(jd, meta, imgs_data, st.session_state['kop_bytes'], st.session_state['ttd_bytes'], full_context)
@@ -742,6 +792,7 @@ if check_password():
                     else:
                         with st.spinner("Sedang menghubungi AI dan menyusun dokumen..."):
                             jd = generate_isi_laporan(rhk, jk, u_kpm, "Peserta", meta['bulan'], lokasi, ka)
+                            meta['kegiatan_spesifik'] = jk
                             if jd:
                                 imgs_data = [io.BytesIO(f.getvalue()) for f in ft]
                                 w = create_word_doc(jd, meta, imgs_data, st.session_state['kop_bytes'], st.session_state['ttd_bytes'], ka)
