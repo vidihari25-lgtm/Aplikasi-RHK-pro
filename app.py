@@ -290,6 +290,9 @@ def create_word_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
     run3.bold = True
     run3.font.size = Pt(11)
 
+    # Garis pemisah DIHAPUS
+    # doc.add_paragraph("________________________________________________________________________________________________").alignment = 1
+
     
     # Helper untuk paragraf isi
     def add_text_body(text, bold=False):
@@ -381,8 +384,7 @@ def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
     pdf = FPDF('P', 'mm', 'A4')
     pdf.set_auto_page_break(auto=True, margin=20)
     pdf.add_page()
-    # REVISI 1: Mengurangi margin kanan menjadi 15mm agar TTD bisa geser lebih kanan
-    pdf.set_margins(25, 25, 15) 
+    pdf.set_margins(25, 25, 25) # Margin 2.5cm
 
     # --- KOP ---
     if kop:
@@ -418,6 +420,8 @@ def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
     # Baris 3: Bulan Tahun
     pdf.cell(0, 6, f"{clean_text_for_pdf(meta['bulan'].upper())}", ln=True, align='C')
 
+    # Garis bawah DIHAPUS
+    # pdf.line(25, pdf.get_y()+2, 185, pdf.get_y()+2)
     pdf.ln(8)
     
     def add_paragraph_pdf(text):
@@ -487,8 +491,8 @@ def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
 
     # --- TTD ---
     if pdf.get_y() > 220: pdf.add_page()
-    # REVISI 2: Geser X ke 140 (lebih kanan) dan perkecil W ke 55
-    x_block = 140; w_block = 55
+    # REVISI POSISI TTD PDF (DIGESER KE KANAN DARI 130 JADI 135)
+    x_block = 135; w_block = 60
     pdf.set_x(x_block); pdf.multi_cell(w_block, 6, f"{clean_text_for_pdf(meta['kab'])}, {clean_text_for_pdf(meta['tgl'])}", align='C')
     pdf.set_x(x_block); pdf.multi_cell(w_block, 6, clean_text_for_pdf(meta.get('jabatan', 'Pendamping Sosial')), align='C')
     
