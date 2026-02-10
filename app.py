@@ -82,13 +82,13 @@ def init_db():
     conn = sqlite3.connect('rhk_pro_fixed.db')
     c = conn.cursor()
     
-    # 1. Tabel Users (BARU: Untuk Login Multi Akun)
+    # 1. Tabel Users
     c.execute('''CREATE TABLE IF NOT EXISTS users (
         username TEXT PRIMARY KEY, 
         password TEXT
     )''')
     
-    # 2. Tabel User Settings (UPDATE: Tambah kolom username)
+    # 2. Tabel User Settings
     c.execute('''CREATE TABLE IF NOT EXISTS user_settings (
         id INTEGER PRIMARY KEY AUTOINCREMENT, 
         username TEXT,
@@ -96,7 +96,6 @@ def init_db():
         prov TEXT, kab TEXT, kec TEXT, kel TEXT, jabatan TEXT
     )''')
     
-    # Migrasi kolom username & jabatan jika belum ada
     try:
         c.execute("ALTER TABLE user_settings ADD COLUMN username TEXT")
     except: pass
@@ -104,7 +103,7 @@ def init_db():
         c.execute("ALTER TABLE user_settings ADD COLUMN jabatan TEXT")
     except: pass
 
-    # 3. Tabel Riwayat Laporan (UPDATE: Tambah kolom username)
+    # 3. Tabel Riwayat Laporan
     c.execute('''CREATE TABLE IF NOT EXISTS riwayat_laporan (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         username TEXT,
@@ -126,17 +125,14 @@ def init_db():
 
 def get_user_settings(username):
     conn = sqlite3.connect('rhk_pro_fixed.db'); c = conn.cursor()
-    # Ambil data berdasarkan username
     c.execute('SELECT nama, nip, kpm, prov, kab, kec, kel, jabatan FROM user_settings WHERE username=?', (username,))
     data = c.fetchone(); conn.close()
     
     if data and len(data) == 8: return data
-    # Default jika user baru belum isi profil
     return ("Nama User", "NIP", 0, "Provinsi", "Kabupaten", "Kecamatan", "Kelurahan", "Pendamping Sosial")
 
 def save_user_settings(username, nama, nip, kpm, prov, kab, kec, kel, jabatan):
     conn = sqlite3.connect('rhk_pro_fixed.db'); c = conn.cursor()
-    # Cek apakah user sudah punya data
     c.execute("SELECT id FROM user_settings WHERE username=?", (username,))
     exists = c.fetchone()
     
@@ -154,14 +150,12 @@ def save_to_history(username, bulan, tahun, rhk, judul, docx_io, pdf_io):
     docx_io.seek(0); docx_blob = docx_io.getvalue()
     if isinstance(pdf_io, bytes): pdf_blob = pdf_io
     else: pdf_io.seek(0); pdf_blob = pdf_io.getvalue()
-    # Simpan dengan username
     c.execute('''INSERT INTO riwayat_laporan (username, bulan, tahun, jenis_rhk, judul_kegiatan, file_docx, file_pdf) VALUES (?, ?, ?, ?, ?, ?, ?)''', 
               (username, bulan, tahun, rhk, judul, docx_blob, pdf_blob))
     conn.commit(); conn.close()
 
 def get_history_by_filter(username, bulan, tahun):
     conn = sqlite3.connect('rhk_pro_fixed.db'); conn.row_factory = sqlite3.Row; c = conn.cursor()
-    # Filter by username
     if bulan == "SEMUA" and tahun == "SEMUA": 
         c.execute("SELECT id, tanggal, bulan, tahun, jenis_rhk, judul_kegiatan FROM riwayat_laporan WHERE username=? ORDER BY id DESC", (username,))
     elif bulan == "SEMUA": 
@@ -204,7 +198,7 @@ def clean_text_for_pdf(text):
     return text.encode('latin-1', 'replace').decode('latin-1')
 
 # ==========================================
-# 4. GENERATOR AI & DOKUMEN
+# 4. GENERATOR AI & DOKUMEN (UPDATED)
 # ==========================================
 
 try:
@@ -216,11 +210,33 @@ except Exception as e:
 
 def generate_isi_laporan(topik, detail, kpm_total, kpm_fokus, bulan, lokasi_lengkap, ket_info=""):
     prompt = f"""
-    Role: Pendamping PKH Profesional Kemensos RI.
-    Tugas: Buat JSON konten Laporan Kegiatan Bulanan.
-    Konteks: {topik} | {detail} | {lokasi_lengkap} | {bulan} | {ket_info}
-    Gaya: Bahasa birokrasi, formal, teknis pekerjaan sosial.
-    Output JSON (lowercase key): {{ "gambaran_umum": "...", "maksud_tujuan": "...", "ruang_lingkup": "...", "dasar_hukum": ["..."], "kegiatan": ["..."], "hasil": ["..."], "kesimpulan": "...", "saran": ["..."], "penutup": "..." }}
+    Role: Pendamping Sosial PKH Profesional & Berpengalaman Kemensos RI.
+    Tugas: Buat konten Laporan Kegiatan Bulanan yang formal, baku, dan administratif.
+    
+    Data Laporan:
+    - Topik: {topik}
+    - Detail Kegiatan: {detail}
+    - Lokasi: {lokasi_lengkap}
+    - Bulan: {bulan}
+    - Konteks Tambahan: {ket_info}
+    - Sasaran: {kpm_fokus} ({kpm_total} orang)
+
+    Instruksi Format:
+    Gunakan Bahasa Indonesia Ejaan Yang Disempurnakan (EYD) yang baku, kalimat efektif, dan gaya bahasa laporan resmi dinas sosial. Hindari kata-kata santai.
+
+    Output Wajib JSON (tanpa markdown ```json):
+    {{
+      "pendahuluan": {{
+         "umum": "Paragraf pembuka yang menjelaskan latar belakang umum program PKH dan pentingnya kegiatan ini.",
+         "maksud_tujuan": "Paragraf menjelaskan maksud dan tujuan spesifik dilaksanakannya kegiatan {detail}.",
+         "ruang_lingkup": "Paragraf menjelaskan batasan kegiatan, lokasi, dan sasaran peserta.",
+         "dasar": ["Poin dasar hukum atau surat tugas (buat 2-3 contoh umum yang relevan dengan PKH/Kemensos)"]
+      }},
+      "kegiatan": "Paragraf narasi detail yang menjelaskan jalannya kegiatan dari awal hingga akhir secara kronologis dan teknis.",
+      "hasil": "Paragraf atau poin-poin yang menjelaskan output konkret, dampak, atau hasil yang dicapai dari kegiatan tersebut.",
+      "simpulan_saran": "Paragraf berisi kesimpulan evaluatif dan saran konstruktif untuk perbaikan ke depan.",
+      "penutup": "Kalimat penutup laporan yang formal."
+    }}
     """
     try:
         response = model.generate_content(prompt)
@@ -231,106 +247,231 @@ def generate_isi_laporan(topik, detail, kpm_total, kpm_fokus, bulan, lokasi_leng
 def create_word_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
     if data is None: return None
     doc = Document()
-    for s in doc.sections: s.top_margin=Cm(2); s.bottom_margin=Cm(2); s.left_margin=Cm(2.5); s.right_margin=Cm(2.5)
+    
+    # Margin Standar Dinas
+    for s in doc.sections: 
+        s.top_margin=Cm(2.54)
+        s.bottom_margin=Cm(2.54)
+        s.left_margin=Cm(2.54)
+        s.right_margin=Cm(2.54)
+
+    # --- KOP SURAT ---
     if kop: 
-        try: p = doc.add_paragraph(); p.alignment = 1; p.add_run().add_picture(io.BytesIO(kop), width=Inches(6.2))
+        try: 
+            p = doc.add_paragraph()
+            p.alignment = 1
+            p.add_run().add_picture(io.BytesIO(kop), width=Inches(6.2))
         except: pass
-    p = doc.add_paragraph(f"\nLAPORAN\nTENTANG\n{meta['judul'].upper()}\n{meta['bulan'].upper()}"); p.alignment = 1; p.runs[0].bold = True
-    def add_section(title, content, is_list=False):
-        doc.add_paragraph(title, style='Heading 1')
-        if content is None: content = "-"
-        if is_list:
-            if isinstance(content, list): 
-                for item in content: doc.add_paragraph(str(item), style='List Bullet')
-            else: doc.add_paragraph(str(content), style='List Bullet')
-        else: doc.add_paragraph(str(content)).alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
-    add_section("A. Pendahuluan", data.get('gambaran_umum', '-'))
-    add_section("B. Maksud & Tujuan", data.get('maksud_tujuan', '-'))
-    doc.add_paragraph("C. Pelaksanaan Kegiatan", style='Heading 1')
-    if extra_info: doc.add_paragraph(f"Catatan: {extra_info}", style='Quote')
-    keg = data.get('kegiatan', [])
-    if keg: 
-        for k in keg: doc.add_paragraph(str(k), style='List Bullet')
+
+    # --- JUDUL ---
+    p = doc.add_paragraph(f"\nLAPORAN PELAKSANAAN TUGAS\nTENTANG\n{meta['judul'].upper()}\n{meta['bulan'].upper()}")
+    p.alignment = 1 # Center
+    for r in p.runs: r.bold = True
+    
+    # Helper untuk paragraf isi
+    def add_text_body(text, bold=False):
+        p = doc.add_paragraph(str(text))
+        p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
+        if bold: p.runs[0].bold = True
+
+    # --- A. PENDAHULUAN ---
+    doc.add_paragraph("A. Pendahuluan", style='Heading 1')
+    p_data = data.get('pendahuluan', {})
+    
+    doc.add_paragraph("    1. Umum", style='Normal')
+    add_text_body(p_data.get('umum', '-'))
+    
+    doc.add_paragraph("    2. Maksud dan Tujuan", style='Normal')
+    add_text_body(p_data.get('maksud_tujuan', '-'))
+
+    doc.add_paragraph("    3. Ruang Lingkup", style='Normal')
+    add_text_body(p_data.get('ruang_lingkup', '-'))
+
+    doc.add_paragraph("    4. Dasar", style='Normal')
+    dasar = p_data.get('dasar', [])
+    if isinstance(dasar, list):
+        for item in dasar: doc.add_paragraph(str(item), style='List Bullet')
+    else:
+        add_text_body(str(dasar))
+
+    # --- B. KEGIATAN YANG DILAKSANAKAN ---
+    doc.add_paragraph("B. Kegiatan yang dilaksanakan", style='Heading 1')
+    if extra_info: doc.add_paragraph(f"Catatan Lapangan: {extra_info}", style='Quote')
+    add_text_body(data.get('kegiatan', '-'))
+    
     if kpm_data:
-        doc.add_paragraph("Data KPM Terkait:", style='Heading 2')
-        table = doc.add_table(rows=1, cols=2); table.style = 'Table Grid'
-        for k, v in kpm_data.items(): row = table.add_row().cells; row[0].text = str(k); row[1].text = str(v)
+        doc.add_paragraph("    Data Peserta/KPM:", style='Normal')
+        table = doc.add_table(rows=1, cols=2)
+        table.style = 'Table Grid'
+        for k, v in kpm_data.items(): 
+            row = table.add_row().cells
+            row[0].text = str(k)
+            row[1].text = str(v)
         doc.add_paragraph("\n")
-    add_section("D. Hasil", data.get('hasil', []), True)
-    add_section("E. Penutup", data.get('penutup', '-'))
+
+    # --- C. HASIL YANG DICAPAI ---
+    doc.add_paragraph("C. Hasil yang dicapai", style='Heading 1')
+    hasil = data.get('hasil', '-')
+    if isinstance(hasil, list):
+        for h in hasil: doc.add_paragraph(str(h), style='List Bullet')
+    else:
+        add_text_body(hasil)
+
+    # --- D. SIMPULAN DAN SARAN ---
+    doc.add_paragraph("D. Simpulan dan Saran", style='Heading 1')
+    add_text_body(data.get('simpulan_saran', '-'))
+
+    # --- E. PENUTUP ---
+    doc.add_paragraph("E. Penutup", style='Heading 1')
+    add_text_body(data.get('penutup', '-'))
+
     doc.add_paragraph("\n\n")
+    
+    # --- TANDA TANGAN ---
     table = doc.add_table(rows=1, cols=2); table.autofit = False
     table.columns[0].width = Inches(3); table.columns[1].width = Inches(3)
     c2 = table.cell(0, 1).paragraphs[0]; c2.alignment = 1
-    # [JABATAN DINAMIS WORD]
+    
     c2.add_run(f"{meta['kab']}, {meta['tgl']}\n{meta.get('jabatan','Pendamping Sosial')}\n\n")
     if ttd: 
         try: c2.add_run().add_picture(io.BytesIO(ttd), height=Inches(0.8))
         except: pass
     c2.add_run(f"\n{meta['nama']}\nNIP. {meta['nip']}")
+    
+    # --- DOKUMENTASI ---
     if imgs:
-        doc.add_page_break(); doc.add_paragraph("DOKUMENTASI", style='Heading 1').alignment = 1
+        doc.add_page_break()
+        doc.add_paragraph("LAMPIRAN DOKUMENTASI", style='Heading 1').alignment = 1
         for img in imgs:
-            try: doc.add_paragraph().alignment = 1; doc.add_picture(compress_image(img), width=Inches(3.5))
+            try: 
+                doc.add_paragraph().alignment = 1
+                doc.add_picture(compress_image(img), width=Inches(4.0))
             except: pass
+            
     bio = io.BytesIO(); doc.save(bio); return bio
 
 def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
     if data is None: return None
-    pdf = FPDF('P', 'mm', 'A4'); pdf.set_auto_page_break(auto=True, margin=20); pdf.add_page(); pdf.set_margins(20, 20, 20)
+    pdf = FPDF('P', 'mm', 'A4')
+    pdf.set_auto_page_break(auto=True, margin=20)
+    pdf.add_page()
+    pdf.set_margins(25, 25, 25) # Margin 2.5cm
+
+    # --- KOP ---
     if kop:
         with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
             tmp.write(kop); tmp.flush(); tmp_path = tmp.name
-        try: w_kop = 210 * 0.8; x_kop = (210 - w_kop) / 2; pdf.image(tmp_path, x=x_kop, y=0, w=w_kop); pdf.set_y(38) 
+        try: 
+            w_kop = 210 * 0.8; x_kop = (210 - w_kop) / 2
+            pdf.image(tmp_path, x=x_kop, y=10, w=w_kop)
+            pdf.set_y(40) 
         except: pdf.ln(10)
         finally: 
             if os.path.exists(tmp_path): os.remove(tmp_path)
     else: pdf.ln(10)
+
     pdf.set_font("Arial", "B", 12)
-    title_text = f"LAPORAN\nTENTANG\n{clean_text_for_pdf(meta['judul'].upper())}\n{clean_text_for_pdf(meta['bulan'].upper())}"
-    pdf.multi_cell(0, 6, title_text, align='C'); pdf.ln(8)
-    def add_section_pdf(title, content, is_list=False):
-        pdf.set_font("Arial", "B", 11); pdf.cell(0, 7, clean_text_for_pdf(title), ln=True); pdf.set_font("Arial", "", 11)
-        if content is None: content = "-"
-        if is_list and isinstance(content, list):
-            for item in content: pdf.set_x(25); pdf.multi_cell(0, 6, f"- {clean_text_for_pdf(item)}")
-        else: pdf.multi_cell(0, 6, clean_text_for_pdf(str(content)))
-        pdf.ln(3)
-    add_section_pdf("A. Pendahuluan", data.get('gambaran_umum'))
-    add_section_pdf("B. Maksud & Tujuan", data.get('maksud_tujuan'))
-    pdf.set_font("Arial", "B", 11); pdf.cell(0, 7, "C. Pelaksanaan Kegiatan", ln=True); pdf.set_font("Arial", "", 11)
-    if extra_info: pdf.set_font("Arial", "I", 10); pdf.multi_cell(0, 6, f"Catatan: {clean_text_for_pdf(extra_info)}"); pdf.set_font("Arial", "", 11)
-    keg = data.get('kegiatan', [])
-    if keg: 
-        for k in keg: pdf.set_x(25); pdf.multi_cell(0, 6, f"- {clean_text_for_pdf(k)}")
+    title_text = f"LAPORAN PELAKSANAAN TUGAS\nTENTANG\n{clean_text_for_pdf(meta['judul'].upper())}\n{clean_text_for_pdf(meta['bulan'].upper())}"
+    pdf.multi_cell(0, 6, title_text, align='C')
+    pdf.ln(8)
+    
+    def add_paragraph_pdf(text):
+        pdf.set_font("Arial", "", 11)
+        pdf.multi_cell(0, 6, clean_text_for_pdf(str(text)))
+        pdf.ln(2)
+
+    # --- A. PENDAHULUAN ---
+    pdf.set_font("Arial", "B", 11); pdf.cell(0, 7, "A. Pendahuluan", ln=True); pdf.set_font("Arial", "", 11)
+    p_data = data.get('pendahuluan', {})
+    
+    pdf.set_x(30); pdf.cell(0, 6, "1. Umum", ln=True)
+    pdf.set_x(35); pdf.multi_cell(0, 6, clean_text_for_pdf(p_data.get('umum', '-')))
+    
+    pdf.set_x(30); pdf.cell(0, 6, "2. Maksud dan Tujuan", ln=True)
+    pdf.set_x(35); pdf.multi_cell(0, 6, clean_text_for_pdf(p_data.get('maksud_tujuan', '-')))
+
+    pdf.set_x(30); pdf.cell(0, 6, "3. Ruang Lingkup", ln=True)
+    pdf.set_x(35); pdf.multi_cell(0, 6, clean_text_for_pdf(p_data.get('ruang_lingkup', '-')))
+
+    pdf.set_x(30); pdf.cell(0, 6, "4. Dasar", ln=True)
+    dasar = p_data.get('dasar', [])
+    if isinstance(dasar, list):
+        for item in dasar: 
+            pdf.set_x(35); pdf.multi_cell(0, 6, f"- {clean_text_for_pdf(item)}")
+    else:
+        pdf.set_x(35); pdf.multi_cell(0, 6, clean_text_for_pdf(str(dasar)))
     pdf.ln(3)
+
+    # --- B. KEGIATAN ---
+    pdf.set_font("Arial", "B", 11); pdf.cell(0, 7, "B. Kegiatan yang dilaksanakan", ln=True); pdf.set_font("Arial", "", 11)
+    if extra_info: 
+        pdf.set_font("Arial", "I", 10)
+        pdf.multi_cell(0, 6, f"Catatan: {clean_text_for_pdf(extra_info)}")
+        pdf.set_font("Arial", "", 11)
+    add_paragraph_pdf(data.get('kegiatan', '-'))
+    
     if kpm_data:
-        pdf.set_font("Arial", "B", 10); pdf.cell(0, 7, "Data KPM Terkait:", ln=True); pdf.set_font("Arial", "", 10); col_w = 85
-        for k, v in kpm_data.items(): pdf.cell(col_w, 6, clean_text_for_pdf(str(k)), border=1); pdf.cell(col_w, 6, clean_text_for_pdf(str(v)), border=1, ln=True)
-        pdf.ln(5)
-    add_section_pdf("D. Hasil", data.get('hasil', True))
-    add_section_pdf("E. Penutup", data.get('penutup'))
+        pdf.ln(2)
+        pdf.set_font("Arial", "B", 10); pdf.cell(0, 6, "Data Peserta:", ln=True); pdf.set_font("Arial", "", 10)
+        col_w = 80
+        for k, v in kpm_data.items(): 
+            pdf.cell(col_w, 6, clean_text_for_pdf(str(k)), border=1)
+            pdf.cell(col_w, 6, clean_text_for_pdf(str(v)), border=1, ln=True)
+        pdf.ln(3)
+
+    # --- C. HASIL ---
+    pdf.set_font("Arial", "B", 11); pdf.cell(0, 7, "C. Hasil yang dicapai", ln=True); pdf.set_font("Arial", "", 11)
+    hasil = data.get('hasil', '-')
+    if isinstance(hasil, list):
+        for h in hasil: 
+            pdf.set_x(30); pdf.multi_cell(0, 6, f"- {clean_text_for_pdf(h)}")
+    else:
+        add_paragraph_pdf(hasil)
+    pdf.ln(3)
+
+    # --- D. SIMPULAN SARAN ---
+    pdf.set_font("Arial", "B", 11); pdf.cell(0, 7, "D. Simpulan dan Saran", ln=True); pdf.set_font("Arial", "", 11)
+    add_paragraph_pdf(data.get('simpulan_saran', '-'))
+    pdf.ln(3)
+
+    # --- E. PENUTUP ---
+    pdf.set_font("Arial", "B", 11); pdf.cell(0, 7, "E. Penutup", ln=True); pdf.set_font("Arial", "", 11)
+    add_paragraph_pdf(data.get('penutup', '-'))
+    pdf.ln(10)
+
+    # --- TTD ---
     if pdf.get_y() > 220: pdf.add_page()
-    else: pdf.ln(10)
-    pdf.set_font("Arial", "", 11); x_block = 130; w_block = 60
+    x_block = 130; w_block = 60
     pdf.set_x(x_block); pdf.multi_cell(w_block, 6, f"{clean_text_for_pdf(meta['kab'])}, {clean_text_for_pdf(meta['tgl'])}", align='C')
-    # [JABATAN DINAMIS PDF]
     pdf.set_x(x_block); pdf.multi_cell(w_block, 6, clean_text_for_pdf(meta.get('jabatan', 'Pendamping Sosial')), align='C')
+    
     if ttd:
-        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_ttd: tmp_ttd.write(ttd); tmp_ttd.flush(); ttd_path = tmp_ttd.name
-        try: y_img = pdf.get_y(); pdf.image(ttd_path, x=x_block + 5, y=y_img, h=25); pdf.set_y(y_img + 27)
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp_ttd: 
+            tmp_ttd.write(ttd); tmp_ttd.flush(); ttd_path = tmp_ttd.name
+        try: 
+            y_img = pdf.get_y()
+            pdf.image(ttd_path, x=x_block + 5, y=y_img, h=25)
+            pdf.set_y(y_img + 27)
         except: pdf.ln(25)
         finally: 
             if os.path.exists(ttd_path): os.remove(ttd_path)
     else: pdf.ln(25)
+    
     pdf.set_x(x_block); pdf.set_font("Arial", "BU", 11); pdf.cell(w_block, 6, clean_text_for_pdf(meta['nama']), ln=True, align='C')
     pdf.set_x(x_block); pdf.set_font("Arial", "", 11); pdf.cell(w_block, 6, f"NIP. {clean_text_for_pdf(meta['nip'])}", ln=True, align='C')
+
+    # --- LAMPIRAN ---
     if imgs:
-        pdf.add_page(); pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, "DOKUMENTASI KEGIATAN", ln=True, align='C'); pdf.ln(5)
+        pdf.add_page()
+        pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, "LAMPIRAN DOKUMENTASI", ln=True, align='C'); pdf.ln(5)
         for img_bytes in imgs:
             compressed = compress_image(img_bytes)
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_img: tmp_img.write(compressed.getvalue()); tmp_img.flush(); img_path = tmp_img.name
-            try: x_center = (210 - 120) / 2; pdf.image(img_path, x=x_center, w=120); pdf.ln(5)
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_img: 
+                tmp_img.write(compressed.getvalue()); tmp_img.flush(); img_path = tmp_img.name
+            try: 
+                x_center = (210 - 120) / 2
+                pdf.image(img_path, x=x_center, w=120)
+                pdf.ln(5)
             except: pass
             finally: 
                 if os.path.exists(img_path): os.remove(img_path)
