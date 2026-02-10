@@ -270,23 +270,33 @@ def create_word_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
             p.add_run().add_picture(io.BytesIO(kop), width=Inches(6.2))
         except: pass
     
-    # --- HEADER TAMBAHAN (SESUAI REQUEST) ---
-    # Menampilkan Jenis RHK dan Nama Kegiatan di bawah Kop
-    p_rhk = doc.add_paragraph(f"LAPORAN KEGIATAN {meta.get('rhk_id', 'RHK ...').upper()}")
-    p_rhk.alignment = 1 # Center
-    p_rhk.runs[0].bold = True
-    p_rhk.runs[0].font.size = Pt(12) # Sedikit lebih besar
-    
-    p_keg = doc.add_paragraph(f"{meta.get('kegiatan_spesifik', 'Isi Pilihan Laporan Harian')}")
-    p_keg.alignment = 1 # Center
-    p_keg.runs[0].bold = True
-    
+    # --- HEADER TAMBAHAN DIUBAH SESUAI REVISI ---
+    # Menampilkan Jenis RHK, Nama Kegiatan, dan Bulan Tahun secara terpusat dan tebal
+    p_header = doc.add_paragraph()
+    p_header.alignment = 1 # Center
+
+    # Baris 1: LAPORAN KEGIATAN RHK X
+    run1 = p_header.add_run(f"LAPORAN KEGIATAN {meta.get('rhk_id', 'RHK ...').upper()}\n")
+    run1.bold = True
+    run1.font.size = Pt(12)
+
+    # Baris 2: Nama Kegiatan
+    run2 = p_header.add_run(f"{meta.get('kegiatan_spesifik', 'Isi Pilihan Laporan Harian')}\n")
+    run2.bold = True
+    run2.font.size = Pt(11)
+
+    # Baris 3: Bulan Tahun
+    run3 = p_header.add_run(f"{meta['bulan'].upper()}")
+    run3.bold = True
+    run3.font.size = Pt(11)
+
+    # Garis pemisah
     doc.add_paragraph("________________________________________________________________________________________________").alignment = 1
 
-    # --- JUDUL RESMI ---
-    p = doc.add_paragraph(f"\nLAPORAN PELAKSANAAN TUGAS\nTENTANG\n{meta['judul'].upper()}\n{meta['bulan'].upper()}")
-    p.alignment = 1 # Center
-    for r in p.runs: r.bold = True
+    # --- JUDUL RESMI --- (BAGIAN INI DIHAPUS SESUAI PERMINTAAN REVISI)
+    # p = doc.add_paragraph(f"\nLAPORAN PELAKSANAAN TUGAS\nTENTANG\n{meta['judul'].upper()}\n{meta['bulan'].upper()}")
+    # p.alignment = 1 # Center
+    # for r in p.runs: r.bold = True
     
     # Helper untuk paragraf isi
     def add_text_body(text, bold=False):
@@ -393,18 +403,25 @@ def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
             if os.path.exists(tmp_path): os.remove(tmp_path)
     else: pdf.ln(10)
 
-    # --- HEADER TAMBAHAN (SESUAI REQUEST) ---
+    # --- HEADER TAMBAHAN DIUBAH SESUAI REVISI ---
     pdf.set_font("Arial", "B", 12)
+    # Baris 1: RHK ID
     pdf.cell(0, 6, f"LAPORAN KEGIATAN {clean_text_for_pdf(meta.get('rhk_id', 'RHK ...').upper())}", ln=True, align='C')
-    pdf.cell(0, 6, f"{clean_text_for_pdf(meta.get('kegiatan_spesifik', 'Isi Pilihan Laporan Harian'))}", ln=True, align='C')
-    pdf.line(25, pdf.get_y(), 185, pdf.get_y()) # Garis bawah
-    pdf.ln(5)
+    # Baris 2: Kegiatan Spesifik
+    pdf.set_font("Arial", "B", 11)
+    pdf.multi_cell(0, 6, f"{clean_text_for_pdf(meta.get('kegiatan_spesifik', 'Isi Pilihan Laporan Harian'))}", align='C')
+    # Baris 3: Bulan Tahun
+    pdf.cell(0, 6, f"{clean_text_for_pdf(meta['bulan'].upper())}", ln=True, align='C')
 
-    # --- JUDUL ---
-    pdf.set_font("Arial", "B", 12)
-    title_text = f"LAPORAN PELAKSANAAN TUGAS\nTENTANG\n{clean_text_for_pdf(meta['judul'].upper())}\n{clean_text_for_pdf(meta['bulan'].upper())}"
-    pdf.multi_cell(0, 6, title_text, align='C')
+    # Garis bawah dan spasi
+    pdf.line(25, pdf.get_y()+2, 185, pdf.get_y()+2)
     pdf.ln(8)
+
+    # --- JUDUL --- (BAGIAN INI DIHAPUS SESUAI PERMINTAAN REVISI)
+    # pdf.set_font("Arial", "B", 12)
+    # title_text = f"LAPORAN PELAKSANAAN TUGAS\nTENTANG\n{clean_text_for_pdf(meta['judul'].upper())}\n{clean_text_for_pdf(meta['bulan'].upper())}"
+    # pdf.multi_cell(0, 6, title_text, align='C')
+    # pdf.ln(8)
     
     def add_paragraph_pdf(text):
         pdf.set_font("Arial", "", 11)
