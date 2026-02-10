@@ -265,14 +265,14 @@ def create_word_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
     # --- KOP SURAT ---
     if kop: 
         try: 
-            p = doc.add_paragraph()
+            p = pdf.line()
             p.alignment = 1
             p.add_run().add_picture(io.BytesIO(kop), width=Inches(6.2))
         except: pass
     
     # --- HEADER TAMBAHAN DIUBAH SESUAI REVISI ---
     # Menampilkan Jenis RHK, Nama Kegiatan, dan Bulan Tahun secara terpusat dan tebal
-    p_header = doc.add_paragraph()
+    p_header = pdf.line()
     p_header.alignment = 1 # Center
 
     # Baris 1: LAPORAN KEGIATAN RHK X
@@ -290,75 +290,72 @@ def create_word_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
     run3.bold = True
     run3.font.size = Pt(11)
 
-    # Garis pemisah
-    doc.add_paragraph("________________________________________________________________________________________________").alignment = 1
-
     # --- JUDUL RESMI --- (BAGIAN INI DIHAPUS SESUAI PERMINTAAN REVISI)
-    # p = doc.add_paragraph(f"\nLAPORAN PELAKSANAAN TUGAS\nTENTANG\n{meta['judul'].upper()}\n{meta['bulan'].upper()}")
+    # p = pdf.line(f"\nLAPORAN PELAKSANAAN TUGAS\nTENTANG\n{meta['judul'].upper()}\n{meta['bulan'].upper()}")
     # p.alignment = 1 # Center
     # for r in p.runs: r.bold = True
     
     # Helper untuk paragraf isi
     def add_text_body(text, bold=False):
-        p = doc.add_paragraph(str(text))
+        p = pdf.line(str(text))
         p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
         if bold: p.runs[0].bold = True
 
     # --- A. PENDAHULUAN ---
-    doc.add_paragraph("A. Pendahuluan", style='Heading 1')
+    pdf.line("A. Pendahuluan", style='Heading 1')
     p_data = data.get('pendahuluan', {})
     
-    doc.add_paragraph("    1. Umum", style='Normal')
+    pdf.line("    1. Umum", style='Normal')
     add_text_body(p_data.get('umum', '-'))
     
-    doc.add_paragraph("    2. Maksud dan Tujuan", style='Normal')
+    pdf.line("    2. Maksud dan Tujuan", style='Normal')
     add_text_body(p_data.get('maksud_tujuan', '-'))
 
-    doc.add_paragraph("    3. Ruang Lingkup", style='Normal')
+    pdf.line("    3. Ruang Lingkup", style='Normal')
     add_text_body(p_data.get('ruang_lingkup', '-'))
 
-    doc.add_paragraph("    4. Dasar", style='Normal')
+    pdf.line("    4. Dasar", style='Normal')
     dasar = p_data.get('dasar', [])
     if isinstance(dasar, list):
         for item in dasar: 
             # Filter Safety: Jika AI masih bandel mengeluarkan Surat Tugas
             if "Surat Tugas" not in item:
-                doc.add_paragraph(str(item), style='List Bullet')
+                pdf.line(str(item), style='List Bullet')
     else:
         add_text_body(str(dasar))
 
     # --- B. KEGIATAN YANG DILAKSANAKAN ---
-    doc.add_paragraph("B. Kegiatan yang dilaksanakan", style='Heading 1')
-    if extra_info: doc.add_paragraph(f"Catatan Lapangan: {extra_info}", style='Quote')
+    pdf.line("B. Kegiatan yang dilaksanakan", style='Heading 1')
+    if extra_info: pdf.line(f"Catatan Lapangan: {extra_info}", style='Quote')
     add_text_body(data.get('kegiatan', '-'))
     
     if kpm_data:
-        doc.add_paragraph("    Data Peserta/KPM:", style='Normal')
+        pdf.line("    Data Peserta/KPM:", style='Normal')
         table = doc.add_table(rows=1, cols=2)
         table.style = 'Table Grid'
         for k, v in kpm_data.items(): 
             row = table.add_row().cells
             row[0].text = str(k)
             row[1].text = str(v)
-        doc.add_paragraph("\n")
+        pdf.line("\n")
 
     # --- C. HASIL YANG DICAPAI ---
-    doc.add_paragraph("C. Hasil yang dicapai", style='Heading 1')
+    pdf.line("C. Hasil yang dicapai", style='Heading 1')
     hasil = data.get('hasil', '-')
     if isinstance(hasil, list):
-        for h in hasil: doc.add_paragraph(str(h), style='List Bullet')
+        for h in hasil: pdf.line(str(h), style='List Bullet')
     else:
         add_text_body(hasil)
 
     # --- D. SIMPULAN DAN SARAN ---
-    doc.add_paragraph("D. Simpulan dan Saran", style='Heading 1')
+    pdf.line("D. Simpulan dan Saran", style='Heading 1')
     add_text_body(data.get('simpulan_saran', '-'))
 
     # --- E. PENUTUP ---
-    doc.add_paragraph("E. Penutup", style='Heading 1')
+    pdf.line("E. Penutup", style='Heading 1')
     add_text_body(data.get('penutup', '-'))
 
-    doc.add_paragraph("\n\n")
+    pdf.line("\n\n")
     
     # --- TANDA TANGAN ---
     table = doc.add_table(rows=1, cols=2); table.autofit = False
@@ -374,10 +371,10 @@ def create_word_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
     # --- DOKUMENTASI ---
     if imgs:
         doc.add_page_break()
-        doc.add_paragraph("LAMPIRAN DOKUMENTASI", style='Heading 1').alignment = 1
+        pdf.line("LAMPIRAN DOKUMENTASI", style='Heading 1').alignment = 1
         for img in imgs:
             try: 
-                doc.add_paragraph().alignment = 1
+                pdf.line().alignment = 1
                 doc.add_picture(compress_image(img), width=Inches(4.0))
             except: pass
             
@@ -829,3 +826,4 @@ if check_password():
     if st.session_state['page'] == 'home': show_dashboard()
     elif st.session_state['page'] == 'history': show_history_page()
     else: show_detail()
+
