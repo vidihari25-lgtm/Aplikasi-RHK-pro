@@ -491,7 +491,8 @@ def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
 
     # --- TTD ---
     if pdf.get_y() > 220: pdf.add_page()
-    x_block = 130; w_block = 60
+    # REVISI POSISI TTD PDF (DIGESER KE KANAN DARI 130 JADI 135)
+    x_block = 135; w_block = 60
     pdf.set_x(x_block); pdf.multi_cell(w_block, 6, f"{clean_text_for_pdf(meta['kab'])}, {clean_text_for_pdf(meta['tgl'])}", align='C')
     pdf.set_x(x_block); pdf.multi_cell(w_block, 6, clean_text_for_pdf(meta.get('jabatan', 'Pendamping Sosial')), align='C')
     
