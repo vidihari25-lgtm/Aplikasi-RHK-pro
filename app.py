@@ -82,22 +82,32 @@ def init_db():
     conn = sqlite3.connect('rhk_pro_fixed.db')
     c = conn.cursor()
     
-    # 1. Tabel User Settings
-    c.execute('''CREATE TABLE IF NOT EXISTS user_settings (id INTEGER PRIMARY KEY, nama TEXT, nip TEXT, kpm INTEGER, prov TEXT, kab TEXT, kec TEXT, kel TEXT, jabatan TEXT)''')
+    # 1. Tabel Users (BARU: Untuk Login Multi Akun)
+    c.execute('''CREATE TABLE IF NOT EXISTS users (
+        username TEXT PRIMARY KEY, 
+        password TEXT
+    )''')
     
-    # Cek kolom jabatan (Logic Upgrade)
+    # 2. Tabel User Settings (UPDATE: Tambah kolom username)
+    c.execute('''CREATE TABLE IF NOT EXISTS user_settings (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, 
+        username TEXT,
+        nama TEXT, nip TEXT, kpm INTEGER, 
+        prov TEXT, kab TEXT, kec TEXT, kel TEXT, jabatan TEXT
+    )''')
+    
+    # Migrasi kolom username & jabatan jika belum ada
     try:
-        c.execute("SELECT jabatan FROM user_settings LIMIT 1")
-    except sqlite3.OperationalError:
-        try:
-            c.execute("ALTER TABLE user_settings ADD COLUMN jabatan TEXT")
-            c.execute("UPDATE user_settings SET jabatan = 'Pendamping Sosial' WHERE id=1")
-            conn.commit()
-        except: pass
+        c.execute("ALTER TABLE user_settings ADD COLUMN username TEXT")
+    except: pass
+    try:
+        c.execute("ALTER TABLE user_settings ADD COLUMN jabatan TEXT")
+    except: pass
 
-    # 2. Tabel Riwayat Laporan
+    # 3. Tabel Riwayat Laporan (UPDATE: Tambah kolom username)
     c.execute('''CREATE TABLE IF NOT EXISTS riwayat_laporan (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        username TEXT,
         tanggal TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         bulan TEXT,
         tahun TEXT,
@@ -107,40 +117,57 @@ def init_db():
         file_pdf BLOB
     )''')
     
-    c.execute('SELECT count(*) FROM user_settings')
-    if c.fetchone()[0] == 0:
-        c.execute('INSERT INTO user_settings (id, nama, nip, kpm, prov, kab, kec, kel, jabatan) VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)', 
-                  ("Pendamping PKH", "19xxxx", 100, "Provinsi", "Kabupaten", "Kecamatan", "Kelurahan", "Pendamping Sosial"))
-    conn.commit(); conn.close()
+    try:
+        c.execute("ALTER TABLE riwayat_laporan ADD COLUMN username TEXT")
+    except: pass
+    
+    conn.commit()
+    conn.close()
 
-def get_user_settings():
+def get_user_settings(username):
     conn = sqlite3.connect('rhk_pro_fixed.db'); c = conn.cursor()
-    c.execute('SELECT nama, nip, kpm, prov, kab, kec, kel, jabatan FROM user_settings WHERE id=1')
+    # Ambil data berdasarkan username
+    c.execute('SELECT nama, nip, kpm, prov, kab, kec, kel, jabatan FROM user_settings WHERE username=?', (username,))
     data = c.fetchone(); conn.close()
+    
     if data and len(data) == 8: return data
-    elif data and len(data) < 8: return data + ("Pendamping Sosial",)
-    return data
+    # Default jika user baru belum isi profil
+    return ("Nama User", "NIP", 0, "Provinsi", "Kabupaten", "Kecamatan", "Kelurahan", "Pendamping Sosial")
 
-def save_user_settings(nama, nip, kpm, prov, kab, kec, kel, jabatan):
+def save_user_settings(username, nama, nip, kpm, prov, kab, kec, kel, jabatan):
     conn = sqlite3.connect('rhk_pro_fixed.db'); c = conn.cursor()
-    c.execute('''UPDATE user_settings SET nama=?, nip=?, kpm=?, prov=?, kab=?, kec=?, kel=?, jabatan=? WHERE id=1''', 
-              (nama, nip, kpm, prov, kab, kec, kel, jabatan))
+    # Cek apakah user sudah punya data
+    c.execute("SELECT id FROM user_settings WHERE username=?", (username,))
+    exists = c.fetchone()
+    
+    if exists:
+        c.execute('''UPDATE user_settings SET nama=?, nip=?, kpm=?, prov=?, kab=?, kec=?, kel=?, jabatan=? WHERE username=?''', 
+                  (nama, nip, kpm, prov, kab, kec, kel, jabatan, username))
+    else:
+        c.execute('''INSERT INTO user_settings (username, nama, nip, kpm, prov, kab, kec, kel, jabatan) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', 
+                  (username, nama, nip, kpm, prov, kab, kec, kel, jabatan))
     conn.commit(); conn.close()
 
-def save_to_history(bulan, tahun, rhk, judul, docx_io, pdf_io):
+def save_to_history(username, bulan, tahun, rhk, judul, docx_io, pdf_io):
     conn = sqlite3.connect('rhk_pro_fixed.db')
     c = conn.cursor()
     docx_io.seek(0); docx_blob = docx_io.getvalue()
     if isinstance(pdf_io, bytes): pdf_blob = pdf_io
     else: pdf_io.seek(0); pdf_blob = pdf_io.getvalue()
-    c.execute('''INSERT INTO riwayat_laporan (bulan, tahun, jenis_rhk, judul_kegiatan, file_docx, file_pdf) VALUES (?, ?, ?, ?, ?, ?)''', (bulan, tahun, rhk, judul, docx_blob, pdf_blob))
+    # Simpan dengan username
+    c.execute('''INSERT INTO riwayat_laporan (username, bulan, tahun, jenis_rhk, judul_kegiatan, file_docx, file_pdf) VALUES (?, ?, ?, ?, ?, ?, ?)''', 
+              (username, bulan, tahun, rhk, judul, docx_blob, pdf_blob))
     conn.commit(); conn.close()
 
-def get_history_by_filter(bulan, tahun):
+def get_history_by_filter(username, bulan, tahun):
     conn = sqlite3.connect('rhk_pro_fixed.db'); conn.row_factory = sqlite3.Row; c = conn.cursor()
-    if bulan == "SEMUA" and tahun == "SEMUA": c.execute("SELECT id, tanggal, bulan, tahun, jenis_rhk, judul_kegiatan FROM riwayat_laporan ORDER BY id DESC")
-    elif bulan == "SEMUA": c.execute("SELECT id, tanggal, bulan, tahun, jenis_rhk, judul_kegiatan FROM riwayat_laporan WHERE tahun=? ORDER BY id DESC", (tahun,))
-    else: c.execute("SELECT id, tanggal, bulan, tahun, jenis_rhk, judul_kegiatan FROM riwayat_laporan WHERE bulan=? AND tahun=? ORDER BY id DESC", (bulan, tahun))
+    # Filter by username
+    if bulan == "SEMUA" and tahun == "SEMUA": 
+        c.execute("SELECT id, tanggal, bulan, tahun, jenis_rhk, judul_kegiatan FROM riwayat_laporan WHERE username=? ORDER BY id DESC", (username,))
+    elif bulan == "SEMUA": 
+        c.execute("SELECT id, tanggal, bulan, tahun, jenis_rhk, judul_kegiatan FROM riwayat_laporan WHERE username=? AND tahun=? ORDER BY id DESC", (username, tahun))
+    else: 
+        c.execute("SELECT id, tanggal, bulan, tahun, jenis_rhk, judul_kegiatan FROM riwayat_laporan WHERE username=? AND bulan=? AND tahun=? ORDER BY id DESC", (username, bulan, tahun))
     data = c.fetchall(); conn.close(); return data
 
 def get_file_from_history(id_laporan, tipe='docx'):
@@ -310,27 +337,69 @@ def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
     return pdf.output(dest='S').encode('latin-1')
 
 # ==========================================
-# 5. UI & LOGIC UTAMA
+# 5. UI & LOGIC UTAMA (MULTI AKUN)
 # ==========================================
 
 def check_password():
     if st.session_state.get("password_correct", False): return True
-    qp = st.query_params
-    if qp.get("auth") == "valid" and qp.get("user") in DAFTAR_USER:
-        st.session_state["password_correct"] = True; st.session_state["username"] = qp.get("user"); return True
-    st.markdown("<br><br><h1 style='text-align: center;'>🔐 LOGIN APP RHK</h1>", unsafe_allow_html=True)
-    col1, col2, col3 = st.columns([1, 2, 1])
-    with col2:
+    
+    st.markdown("<br><h1 style='text-align: center;'>🔐 APLIKASI RHK PRO 2.0</h1>", unsafe_allow_html=True)
+    
+    tab1, tab2 = st.tabs(["MASUK (LOGIN)", "DAFTAR BARU"])
+    
+    # --- TAB LOGIN ---
+    with tab1:
         with st.form("login_form"):
-            input_user = st.text_input("Username"); input_pass = st.text_input("Password", type="password")
-            if st.form_submit_button("MASUK / LOGIN", type="primary", use_container_width=True):
+            input_user = st.text_input("Username")
+            input_pass = st.text_input("Password", type="password")
+            if st.form_submit_button("MASUK", type="primary", use_container_width=True):
+                # 1. Cek Default/Admin
                 if input_user in DAFTAR_USER and DAFTAR_USER[input_user] == input_pass:
-                    st.session_state["password_correct"] = True; st.session_state["username"] = input_user; st.query_params["auth"] = "valid"; st.query_params["user"] = input_user; st.rerun()
-                else: st.error("😕 Username atau Password Salah!")
+                    st.session_state["password_correct"] = True
+                    st.session_state["username"] = input_user
+                    st.rerun()
+                # 2. Cek Database Users
+                else:
+                    conn = sqlite3.connect('rhk_pro_fixed.db'); c = conn.cursor()
+                    c.execute("SELECT password FROM users WHERE username=?", (input_user,))
+                    data = c.fetchone()
+                    conn.close()
+                    
+                    if data and data[0] == input_pass:
+                        st.session_state["password_correct"] = True
+                        st.session_state["username"] = input_user
+                        st.rerun()
+                    else:
+                        st.error("😕 Username atau Password Salah!")
+
+    # --- TAB REGISTRASI ---
+    with tab2:
+        with st.form("reg_form"):
+            st.write("Buat Akun Baru")
+            new_user = st.text_input("Username Baru")
+            new_pass = st.text_input("Password Baru", type="password")
+            if st.form_submit_button("DAFTAR", type="secondary", use_container_width=True):
+                if new_user and new_pass:
+                    conn = sqlite3.connect('rhk_pro_fixed.db'); c = conn.cursor()
+                    try:
+                        c.execute("INSERT INTO users (username, password) VALUES (?, ?)", (new_user, new_pass))
+                        conn.commit()
+                        st.success("✅ Akun berhasil dibuat! Silakan login di tab sebelah.")
+                    except sqlite3.IntegrityError:
+                        st.error("❌ Username sudah terpakai.")
+                    finally:
+                        conn.close()
+                else:
+                    st.warning("Isi username dan password.")
+
     return False
 
 if check_password():
     init_db()
+    
+    # Ambil user yang sedang login
+    current_user = st.session_state.get('username')
+    
     keys = ['page', 'selected_rhk', 'kop_bytes', 'ttd_bytes', 'rhk2_queue', 'rhk2_results', 'rhk3_queue', 'rhk3_results', 'rhk4_graduasi_results', 'rhk8_queue', 'rhk8_results', 'generated_file_data', 'tgl_val', 'bln_val', 'th_val'] 
     for k in keys:
         if k not in st.session_state: st.session_state[k] = None
@@ -343,10 +412,12 @@ if check_password():
     if not st.session_state['tgl_val']: st.session_state['tgl_val'] = "30 Januari 2026"
 
     def update_tanggal(): st.session_state.tgl_val = f"30 {st.session_state.bln_val.title()} {st.session_state.th_val}"
-    u_nama, u_nip, u_kpm, u_prov, u_kab, u_kec, u_kel, u_jabatan = get_user_settings()
+    
+    # Load settings based on current user
+    u_nama, u_nip, u_kpm, u_prov, u_kab, u_kec, u_kel, u_jabatan = get_user_settings(current_user)
     
     with st.sidebar:
-        st.write(f"👤 User: **{st.session_state.get('username', 'User')}**")
+        st.write(f"👤 User: **{current_user}**")
         if st.button("🔒 Logout", type="primary"): st.session_state["password_correct"] = False; st.query_params.clear(); st.rerun()
         with st.expander("👤 Profil", expanded=False):
             with st.form("profil_form"):
@@ -354,7 +425,10 @@ if check_password():
                 jabatan = st.text_input("Jabatan", value=u_jabatan if u_jabatan else "Pendamping Sosial")
                 kpm = st.number_input("Jml KPM", value=u_kpm); prov = st.text_input("Provinsi", u_prov)
                 kab = st.text_input("Kabupaten", u_kab); kec = st.text_input("Kecamatan", u_kec); kel = st.text_input("Kelurahan", u_kel)
-                if st.form_submit_button("Simpan Profil"): save_user_settings(nama, nip, kpm, prov, kab, kec, kel, jabatan); st.success("Tersimpan!"); st.rerun()
+                if st.form_submit_button("Simpan Profil"): 
+                    save_user_settings(current_user, nama, nip, kpm, prov, kab, kec, kel, jabatan)
+                    st.success("Tersimpan!")
+                    st.rerun()
         st.markdown("---")
         st.selectbox("Bulan", ["JANUARI", "FEBRUARI", "MARET", "APRIL", "MEI", "JUNI", "JULI", "AGUSTUS", "SEPTEMBER", "OKTOBER", "NOVEMBER", "DESEMBER"], key="bln_val", on_change=update_tanggal)
         st.selectbox("Tahun", ["2026", "2027"], key="th_val", on_change=update_tanggal)
@@ -387,7 +461,10 @@ if check_password():
         with col2: f_tahun = st.selectbox("Filter Tahun", ["SEMUA", "2026", "2027"])
         with col3: 
             if st.button("⬅️ Kembali ke Dashboard", use_container_width=True): st.session_state['page'] = 'home'; st.rerun()
-        data = get_history_by_filter(f_bulan, f_tahun)
+        
+        # Load history based on current user
+        data = get_history_by_filter(current_user, f_bulan, f_tahun)
+        
         if not data: st.info("Belum ada riwayat laporan yang tersimpan."); return
         st.markdown(f"**Ditemukan: {len(data)} Dokumen**")
         for row in data:
@@ -449,7 +526,9 @@ if check_password():
                             if jd: 
                                 w = create_word_doc(jd, meta, item['fotos'], st.session_state['kop_bytes'], st.session_state['ttd_bytes'], item['ket'])
                                 p = create_pdf_doc(jd, meta, item['fotos'], st.session_state['kop_bytes'], st.session_state['ttd_bytes'], item['ket'])
-                                if w: results.append({"judul": item['kegiatan'], "file": w, "file_pdf": p}); save_to_history(meta['bulan'], st.session_state.th_val, rhk.split('–')[0], item['kegiatan'], w, p)
+                                if w: 
+                                    results.append({"judul": item['kegiatan'], "file": w, "file_pdf": p})
+                                    save_to_history(current_user, meta['bulan'], st.session_state.th_val, rhk.split('–')[0], item['kegiatan'], w, p)
                             bar.progress((i + 1) / len(queue))
                     st.session_state[r_key] = results; st.success("Selesai! Laporan telah tersimpan di Arsip."); st.rerun()
             if st.session_state.get(r_key):
@@ -475,7 +554,9 @@ if check_password():
                                     if jd:
                                         w = create_word_doc(jd, meta, p_data, st.session_state['kop_bytes'], st.session_state['ttd_bytes'], f"Graduasi {nm}", row)
                                         p = create_pdf_doc(jd, meta, p_data, st.session_state['kop_bytes'], st.session_state['ttd_bytes'], f"Graduasi {nm}", row)
-                                        if w: res.append({"judul": nm, "file": w, "file_pdf": p}); save_to_history(meta['bulan'], st.session_state.th_val, rhk.split('–')[0], nm, w, p)
+                                        if w: 
+                                            res.append({"judul": nm, "file": w, "file_pdf": p})
+                                            save_to_history(current_user, meta['bulan'], st.session_state.th_val, rhk.split('–')[0], nm, w, p)
                                     bar.progress((i+1)/len(sel_kpm))
                             st.session_state['rhk4_graduasi_results'] = res; st.success("Selesai! Laporan tersimpan di Arsip."); st.rerun()
                 except: st.error("Format Excel Salah")
@@ -501,7 +582,7 @@ if check_password():
                                 w = create_word_doc(jd, meta, imgs_data, st.session_state['kop_bytes'], st.session_state['ttd_bytes'], full_context)
                                 p = create_pdf_doc(jd, meta, imgs_data, st.session_state['kop_bytes'], st.session_state['ttd_bytes'], full_context)
                                 st.session_state['generated_file_data'] = {"name": f"Laporan {kegiatan}", "file": w, "file_pdf": p}
-                                save_to_history(meta['bulan'], st.session_state.th_val, rhk.split('–')[0], kegiatan, w, p)
+                                save_to_history(current_user, meta['bulan'], st.session_state.th_val, rhk.split('–')[0], kegiatan, w, p)
                                 st.success("Selesai! Laporan tersimpan di Arsip."); st.rerun()
                             else: st.error("Gagal koneksi AI, coba lagi.")
             if st.session_state.get('generated_file_data'):
@@ -526,7 +607,7 @@ if check_password():
                                 p = create_pdf_doc(jd, meta, imgs_data, st.session_state['kop_bytes'], st.session_state['ttd_bytes'], ka)
                                 if w:
                                     st.session_state['generated_file_data'] = {"name": f"Laporan {jk}", "file": w, "file_pdf": p}
-                                    save_to_history(meta['bulan'], st.session_state.th_val, rhk.split('–')[0], jk, w, p)
+                                    save_to_history(current_user, meta['bulan'], st.session_state.th_val, rhk.split('–')[0], jk, w, p)
                                     st.success("Selesai! Laporan tersimpan di Arsip."); st.rerun()
                             else: st.error("Gagal koneksi AI, coba lagi.")
             if st.session_state.get('generated_file_data'):
@@ -539,4 +620,3 @@ if check_password():
     if st.session_state['page'] == 'home': show_dashboard()
     elif st.session_state['page'] == 'history': show_history_page()
     else: show_detail()
-
