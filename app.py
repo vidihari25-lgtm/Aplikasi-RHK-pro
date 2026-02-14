@@ -334,7 +334,6 @@ def create_word_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
         
         # --- B. KEGIATAN YANG DILAKSANAKAN ---
     doc.add_paragraph("B. Kegiatan yang dilaksanakan", style='Heading 1')
-    if extra_info: doc.add_paragraph(f"Catatan Lapangan: {extra_info}", style='Quote')
     add_text_body(data.get('kegiatan', '-'))
         
     if kpm_data:
@@ -462,10 +461,6 @@ def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
 
     # --- B. KEGIATAN ---
     pdf.set_font("Arial", "B", 11); pdf.cell(0, 7, "B. Kegiatan yang dilaksanakan", ln=True); pdf.set_font("Arial", "", 11)
-    if extra_info: 
-        pdf.set_font("Arial", "I", 10)
-        pdf.multi_cell(0, 6, f"Catatan: {clean_text_for_pdf(extra_info)}")
-        pdf.set_font("Arial", "", 11)
     add_paragraph_pdf(data.get('kegiatan', '-'))
     
     if kpm_data:
@@ -839,6 +834,7 @@ if check_password():
     if st.session_state['page'] == 'home': show_dashboard()
     elif st.session_state['page'] == 'history': show_history_page()
     else: show_detail()
+
 
 
 
