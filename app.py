@@ -279,7 +279,6 @@ def create_word_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
         try: 
             p = doc.add_paragraph()
             p.alignment = 1
-            # 80% Lebar A4 (21cm) = 16.8cm
             p.add_run().add_picture(io.BytesIO(kop), width=Cm(16.8))
         except: pass
     
@@ -287,23 +286,18 @@ def create_word_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
     p_header = doc.add_paragraph()
     p_header.alignment = 1 # Center
 
-    # Baris 1: LAPORAN KEGIATAN RHK X
     run1 = p_header.add_run(f"LAPORAN KEGIATAN {meta.get('rhk_id', 'RHK ...').upper()}\n")
     run1.bold = True
     run1.font.size = Pt(12)
 
-    # Baris 2: Nama Kegiatan
     run2 = p_header.add_run(f"{meta.get('kegiatan_spesifik', 'Isi Pilihan Laporan Harian')}\n")
     run2.bold = True
     run2.font.size = Pt(11)
 
-    # Baris 3: Bulan Tahun
     run3 = p_header.add_run(f"{meta['bulan'].upper()}")
     run3.bold = True
     run3.font.size = Pt(11)
 
-    
-    # Helper untuk paragraf isi
     def add_text_body(text, bold=False):
         p = doc.add_paragraph(str(text))
         p.alignment = WD_ALIGN_PARAGRAPH.JUSTIFY
@@ -326,16 +320,15 @@ def create_word_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
     dasar = p_data.get('dasar', [])
     if isinstance(dasar, list):
         for item in dasar: 
-            # Filter Safety: Jika AI masih bandel mengeluarkan Surat Tugas
             if "Surat Tugas" not in item:
                 doc.add_paragraph(str(item), style='List Bullet')
     else:
         add_text_body(str(dasar))
-        
-        # --- B. KEGIATAN YANG DILAKSANAKAN ---
+
+    # --- B. KEGIATAN YANG DILAKSANAKAN ---
     doc.add_paragraph("B. Kegiatan yang dilaksanakan", style='Heading 1')
     add_text_body(data.get('kegiatan', '-'))
-        
+    
     if kpm_data:
         doc.add_paragraph("    Data Peserta/KPM:", style='Normal')
         table = doc.add_table(rows=1, cols=2)
@@ -375,29 +368,34 @@ def create_word_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
         except: pass
     c2.add_run(f"\n{meta['nama']}\nNIP. {meta['nip']}")
     
-    # --- DOKUMENTASI (UPDATED) ---
+    # --- DOKUMENTASI (FULL REVISI) ---
     if imgs:
         doc.add_page_break()
-        doc.add_paragraph("LAMPIRAN DOKUMENTASI", style='Heading 1').alignment = 1
+        # Judul Lampiran
+        p_judul = doc.add_paragraph("LAMPIRAN DOKUMENTASI")
+        p_judul.style = 'Heading 1'
+        p_judul.alignment = 1 # Center
         
         for i, img in enumerate(imgs):
             try: 
-                # 1. Gambar (Posisi Tengah)
+                # 1. Gambar
                 p_img = doc.add_paragraph()
-                p_img.alignment = 1 # 1 = Center
-                # Lebar diatur 4.5 inci agar proporsional di A4
+                p_img.alignment = 1 # Center
+                # Menggunakan compress_image agar tidak error size
                 p_img.add_run().add_picture(compress_image(img), width=Inches(4.5))
                 
-                # 2. Keterangan di BAWAH Foto (Italic, Font 9)
+                # 2. Caption di BAWAH Foto
                 p_cap = doc.add_paragraph()
                 p_cap.alignment = 1 # Center
+                # Format: Gambar 1: Dokumentasi [Nama Kegiatan]
                 run_cap = p_cap.add_run(f"Gambar {i+1}: Dokumentasi {meta.get('kegiatan_spesifik', 'Kegiatan')}")
                 run_cap.italic = True
-                run_cap.font.size = Pt(9) 
+                run_cap.font.size = Pt(9)
                 
-                # Spasi antar foto
+                # Jarak antar foto
                 doc.add_paragraph("\n")
-            except: pass
+            except Exception as e: 
+                pass
             
     bio = io.BytesIO(); doc.save(bio); return bio
 
@@ -848,6 +846,7 @@ if check_password():
     if st.session_state['page'] == 'home': show_dashboard()
     elif st.session_state['page'] == 'history': show_history_page()
     else: show_detail()
+
 
 
 
