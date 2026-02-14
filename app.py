@@ -404,7 +404,6 @@ def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
     pdf = FPDF('P', 'mm', 'A4')
     pdf.set_auto_page_break(auto=True, margin=20)
     pdf.add_page()
-    # REVISI 1: Mengurangi margin kanan menjadi 15mm agar TTD bisa geser lebih kanan
     pdf.set_margins(25, 25, 15) 
 
     # --- KOP ---
@@ -412,35 +411,24 @@ def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
         with tempfile.NamedTemporaryFile(delete=False, suffix=".png") as tmp:
             tmp.write(kop); tmp.flush(); tmp_path = tmp.name
         try: 
-            # --- FIX OVERLAPPING DENGAN MENGHITUNG TINGGI GAMBAR ---
             img_obj = Image.open(io.BytesIO(kop))
             w_px, h_px = img_obj.size
-            
-            # Lebar target di PDF: 168mm (80% dari 210mm)
             target_w = 210 * 0.8
-            # Hitung tinggi proporsional di PDF (mm)
             target_h = (target_w / w_px) * h_px
-            
             x_kop = (210 - target_w) / 2
             pdf.image(tmp_path, x=x_kop, y=10, w=target_w)
-            
-            # Set posisi Y di bawah gambar + margin 5mm agar tidak tertumpuk
             pdf.set_y(10 + target_h + 5) 
         except: pdf.ln(10)
         finally: 
             if os.path.exists(tmp_path): os.remove(tmp_path)
     else: pdf.ln(10)
 
-    # --- HEADER TAMBAHAN ---
+    # --- HEADER ---
     pdf.set_font("Arial", "B", 12)
-    # Baris 1: RHK ID
     pdf.cell(0, 6, f"LAPORAN KEGIATAN {clean_text_for_pdf(meta.get('rhk_id', 'RHK ...').upper())}", ln=True, align='C')
-    # Baris 2: Kegiatan Spesifik
     pdf.set_font("Arial", "B", 11)
     pdf.multi_cell(0, 6, f"{clean_text_for_pdf(meta.get('kegiatan_spesifik', 'Isi Pilihan Laporan Harian'))}", align='C')
-    # Baris 3: Bulan Tahun
     pdf.cell(0, 6, f"{clean_text_for_pdf(meta['bulan'].upper())}", ln=True, align='C')
-
     pdf.ln(8)
     
     def add_paragraph_pdf(text):
@@ -448,7 +436,7 @@ def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
         pdf.multi_cell(0, 6, clean_text_for_pdf(str(text)))
         pdf.ln(2)
 
-    # --- A. PENDAHULUAN ---
+    # --- ISI LAPORAN ---
     pdf.set_font("Arial", "B", 11); pdf.cell(0, 7, "A. Pendahuluan", ln=True); pdf.set_font("Arial", "", 11)
     p_data = data.get('pendahuluan', {})
     
@@ -471,7 +459,6 @@ def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
         pdf.set_x(35); pdf.multi_cell(0, 6, clean_text_for_pdf(str(dasar)))
     pdf.ln(3)
 
-    # --- B. KEGIATAN ---
     pdf.set_font("Arial", "B", 11); pdf.cell(0, 7, "B. Kegiatan yang dilaksanakan", ln=True); pdf.set_font("Arial", "", 11)
     add_paragraph_pdf(data.get('kegiatan', '-'))
     
@@ -484,7 +471,6 @@ def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
             pdf.cell(col_w, 6, clean_text_for_pdf(str(v)), border=1, ln=True)
         pdf.ln(3)
 
-    # --- C. HASIL ---
     pdf.set_font("Arial", "B", 11); pdf.cell(0, 7, "C. Hasil yang dicapai", ln=True); pdf.set_font("Arial", "", 11)
     hasil = data.get('hasil', '-')
     if isinstance(hasil, list):
@@ -494,19 +480,16 @@ def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
         add_paragraph_pdf(hasil)
     pdf.ln(3)
 
-    # --- D. SIMPULAN SARAN ---
     pdf.set_font("Arial", "B", 11); pdf.cell(0, 7, "D. Simpulan dan Saran", ln=True); pdf.set_font("Arial", "", 11)
     add_paragraph_pdf(data.get('simpulan_saran', '-'))
     pdf.ln(3)
 
-    # --- E. PENUTUP ---
     pdf.set_font("Arial", "B", 11); pdf.cell(0, 7, "E. Penutup", ln=True); pdf.set_font("Arial", "", 11)
     add_paragraph_pdf(data.get('penutup', '-'))
     pdf.ln(10)
 
     # --- TTD ---
     if pdf.get_y() > 220: pdf.add_page()
-    # REVISI 2: Geser X ke 140 (lebih kanan) dan perkecil W ke 55
     x_block = 140; w_block = 55
     pdf.set_x(x_block); pdf.multi_cell(w_block, 6, f"{clean_text_for_pdf(meta['kab'])}, {clean_text_for_pdf(meta['tgl'])}", align='C')
     pdf.set_x(x_block); pdf.multi_cell(w_block, 6, clean_text_for_pdf(meta.get('jabatan', 'Pendamping Sosial')), align='C')
@@ -526,21 +509,36 @@ def create_pdf_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
     pdf.set_x(x_block); pdf.set_font("Arial", "BU", 11); pdf.cell(w_block, 6, clean_text_for_pdf(meta['nama']), ln=True, align='C')
     pdf.set_x(x_block); pdf.set_font("Arial", "", 11); pdf.cell(w_block, 6, f"NIP. {clean_text_for_pdf(meta['nip'])}", ln=True, align='C')
 
-    # --- LAMPIRAN ---
+    # --- LAMPIRAN DOKUMENTASI (FULL REVISI) ---
     if imgs:
         pdf.add_page()
         pdf.set_font("Arial", "B", 12); pdf.cell(0, 10, "LAMPIRAN DOKUMENTASI", ln=True, align='C'); pdf.ln(5)
-        for img_bytes in imgs:
+        
+        for i, img_bytes in enumerate(imgs):
             compressed = compress_image(img_bytes)
             with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_img: 
                 tmp_img.write(compressed.getvalue()); tmp_img.flush(); img_path = tmp_img.name
             try: 
-                x_center = (210 - 120) / 2
-                pdf.image(img_path, x=x_center, w=120)
-                pdf.ln(5)
+                # Cek sisa halaman, pindah jika sisa dikit (< 8cm)
+                if pdf.get_y() > 210: pdf.add_page()
+
+                # 1. Gambar (Center X=50mm)
+                # Lebar gambar 110mm. X Center = (210 - 110) / 2 = 50
+                x_center = 50 
+                pdf.image(img_path, x=x_center, w=110)
+                
+                # 2. Caption di BAWAH Foto (Italic)
+                pdf.ln(2) 
+                pdf.set_font("Arial", "I", 9) 
+                caption = f"Gambar {i+1}: Dokumentasi {meta.get('kegiatan_spesifik', 'Kegiatan')}"
+                pdf.multi_cell(0, 5, clean_text_for_pdf(caption), align='C')
+                
+                # Jarak ke foto berikutnya
+                pdf.ln(10) 
             except: pass
             finally: 
                 if os.path.exists(img_path): os.remove(img_path)
+
     return pdf.output(dest='S').encode('latin-1')
 
 # ==========================================
@@ -846,6 +844,7 @@ if check_password():
     if st.session_state['page'] == 'home': show_dashboard()
     elif st.session_state['page'] == 'history': show_history_page()
     else: show_detail()
+
 
 
 
