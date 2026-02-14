@@ -375,14 +375,28 @@ def create_word_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
         except: pass
     c2.add_run(f"\n{meta['nama']}\nNIP. {meta['nip']}")
     
-    # --- DOKUMENTASI ---
+    # --- DOKUMENTASI (UPDATED) ---
     if imgs:
         doc.add_page_break()
         doc.add_paragraph("LAMPIRAN DOKUMENTASI", style='Heading 1').alignment = 1
-        for img in imgs:
+        
+        for i, img in enumerate(imgs):
             try: 
-                doc.add_paragraph().alignment = 1
-                doc.add_picture(compress_image(img), width=Inches(4.0))
+                # 1. Gambar (Posisi Tengah)
+                p_img = doc.add_paragraph()
+                p_img.alignment = 1 # 1 = Center
+                # Lebar diatur 4.5 inci agar proporsional di A4
+                p_img.add_run().add_picture(compress_image(img), width=Inches(4.5))
+                
+                # 2. Keterangan di BAWAH Foto (Italic, Font 9)
+                p_cap = doc.add_paragraph()
+                p_cap.alignment = 1 # Center
+                run_cap = p_cap.add_run(f"Gambar {i+1}: Dokumentasi {meta.get('kegiatan_spesifik', 'Kegiatan')}")
+                run_cap.italic = True
+                run_cap.font.size = Pt(9) 
+                
+                # Spasi antar foto
+                doc.add_paragraph("\n")
             except: pass
             
     bio = io.BytesIO(); doc.save(bio); return bio
@@ -834,6 +848,7 @@ if check_password():
     if st.session_state['page'] == 'home': show_dashboard()
     elif st.session_state['page'] == 'history': show_history_page()
     else: show_detail()
+
 
 
 
