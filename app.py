@@ -331,12 +331,7 @@ def create_word_doc(data, meta, imgs, kop, ttd, extra_info=None, kpm_data=None):
                 doc.add_paragraph(str(item), style='List Bullet')
     else:
         add_text_body(str(dasar))
-
-    # --- B. KEGIATAN YANG DILAKSANAKAN ---
-    doc.add_paragraph("B. Kegiatan yang dilaksanakan", style='Heading 1')
-    if extra_info: doc.add_paragraph(f"Catatan Lapangan: {extra_info}", style='Quote')
-    add_text_body(data.get('kegiatan', '-'))
-    
+        
     if kpm_data:
         doc.add_paragraph("    Data Peserta/KPM:", style='Normal')
         table = doc.add_table(rows=1, cols=2)
@@ -839,4 +834,5 @@ if check_password():
     if st.session_state['page'] == 'home': show_dashboard()
     elif st.session_state['page'] == 'history': show_history_page()
     else: show_detail()
+
 
