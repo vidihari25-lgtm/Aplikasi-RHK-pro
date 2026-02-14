@@ -209,19 +209,31 @@ except Exception as e:
     st.error(f"Gagal konfigurasi AI: {e}")
 
 def generate_isi_laporan(topik, detail, kpm_total, kpm_fokus, bulan, lokasi_lengkap, ket_info=""):
+    # Pastikan ket_info tidak kosong agar AI tidak halusinasi
+    if not ket_info or str(ket_info).strip() == "" or str(ket_info).strip() == "-":
+        ket_info_prompt = "Kegiatan dilaksanakan sesuai prosedur operasional standar (SOP) yang berlaku."
+    else:
+        ket_info_prompt = ket_info
+
     prompt = f"""
     Role: Pendamping Sosial PKH Profesional & Berpengalaman Kemensos RI.
     Tugas: Buat konten Laporan Kegiatan Bulanan yang formal, baku, dan administratif.
     
     Data Laporan:
-    - Topik: {topik}
-    - Detail Kegiatan: {detail}
+    - Topik RHK: {topik}
+    - Judul Standar: {detail}
     - Lokasi: {lokasi_lengkap}
     - Bulan: {bulan}
-    - Konteks Tambahan: {ket_info}
     - Sasaran: {kpm_fokus} ({kpm_total} orang)
 
-    Instruksi Khusus Bagian "Dasar Hukum":
+    === INSTRUKSI UTAMA (PENTING) ===
+    INPUT KEGIATAN DARI USER: "{ket_info_prompt}"
+    
+    1. Pada bagian JSON "kegiatan": Anda WAJIB mengembangkan narasi kronologis BERDASARKAN "INPUT KEGIATAN DARI USER" di atas. 
+    2. Gunakan "INPUT KEGIATAN DARI USER" sebagai inti cerita. Jangan membuat cerita yang melenceng dari input tersebut.
+    3. Jika input user singkat (misal: "di rumah ketua kelompok mawar"), kembangkan kalimatnya menjadi formal (misal: "Kegiatan dilaksanakan bertempat di kediaman Ketua Kelompok Mawar...").
+    
+    Instruksi Bagian "Dasar Hukum":
     JANGAN PERNAH menggunakan kalimat "Surat Tugas dari Koordinator PKH Kabupaten/Kota Nomor: ... tanggal ...".
     Gunakan HANYA poin-poin dasar hukum normatif berikut ini:
     1. Peraturan Menteri Sosial Republik Indonesia Nomor 1 Tahun 2018 tentang Program Keluarga Harapan.
@@ -239,7 +251,7 @@ def generate_isi_laporan(topik, detail, kpm_total, kpm_fokus, bulan, lokasi_leng
          "ruang_lingkup": "Paragraf menjelaskan batasan kegiatan, lokasi, dan sasaran peserta.",
          "dasar": ["Peraturan Menteri Sosial Republik Indonesia Nomor 1 Tahun 2018 tentang Program Keluarga Harapan", "Keputusan Direktur Jaminan Sosial Keluarga tentang Petunjuk Teknis Pelaksanaan Program Keluarga Harapan", "Rencana Kerja Tahunan (RKT) Pendamping Sosial PKH Tahun 2026"]
       }},
-      "kegiatan": "Paragraf narasi detail yang menjelaskan jalannya kegiatan dari awal hingga akhir secara kronologis dan teknis.",
+      "kegiatan": "Paragraf narasi detail yang menjelaskan jalannya kegiatan. INGAT: Kembangkan paragraf ini berdasarkan '{ket_info_prompt}'. Jelaskan proses dari awal pembukaan hingga penutup sesuai konteks input user tersebut.",
       "hasil": "Paragraf atau poin-poin yang menjelaskan output konkret, dampak, atau hasil yang dicapai dari kegiatan tersebut.",
       "simpulan_saran": "Paragraf berisi kesimpulan evaluatif dan saran konstruktif untuk perbaikan ke depan.",
       "penutup": "Kalimat penutup laporan yang formal."
@@ -827,3 +839,4 @@ if check_password():
     if st.session_state['page'] == 'home': show_dashboard()
     elif st.session_state['page'] == 'history': show_history_page()
     else: show_detail()
+
