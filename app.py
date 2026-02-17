@@ -67,7 +67,7 @@ DAFTAR_USER = {
     "user": "user",
     "vidi": "vidi123", 
     "Royal7": "Paramoreband@7",
-    "ANDRI" : "ANDRI12345"
+    "ANDRI" : "AKU12345"
 }
 
 # --- RESET SESSION JIKA CONFIG BERUBAH ---
@@ -847,6 +847,7 @@ if check_password():
     if st.session_state['page'] == 'home': show_dashboard()
     elif st.session_state['page'] == 'history': show_history_page()
     else: show_detail()
+
 
 
 
